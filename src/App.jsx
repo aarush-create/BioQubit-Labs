@@ -37,7 +37,7 @@ export default function App() {
     setLoading(true);
     try {
       // Replace with your Render URL: e.g., "https://q-vira-backend.onrender.com/predict"
-      const response = await fetch("https://YOUR-RENDER-URL.onrender.com/predict", {
+      const response = await fetch("https://q-vira-backend.onrender.com/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ features: [0.78, 1.12, -0.34, 0.95] }) 
