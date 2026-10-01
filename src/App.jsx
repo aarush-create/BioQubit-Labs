@@ -40,7 +40,7 @@ export default function App() {
 const runLiveQuantumEngine = async () => {
     setLoading(true);
     
-    // Dynamically calculate features based on the user's FASTA text input
+    // Hash the actual FASTA input into 4 parameters for the quantum circuit
     const strLen = fastaInput.length;
     const dynamicFeatures = [
       (strLen % 100) / 100, 
@@ -50,30 +50,25 @@ const runLiveQuantumEngine = async () => {
     ];
 
     try {
-      // If you don't have a backend, this will intentionally fail and trigger the catch block below
-      const response = await fetch("https://YOUR-RENDER-URL.onrender.com/predict", {
+      // THE REAL CONNECTION: Paste your Render URL here
+      const response = await fetch("https://q-vira-backend.onrender.com/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ features: dynamicFeatures }) 
       });
       
+      if (!response.ok) throw new Error("Backend connection failed");
+      
       const data = await response.json();
+      
+      // Update UI with actual quantum output
       setThreatScore(data.threat_score);
       setR0(data.r0);
-      setLoading(false); // <--- Successfully loaded from API
-      
     } catch (error) {
-      console.error("Quantum backend offline, using simulated fallback for demo.");
-      
-      // Fallback animation for the demo video
-      setTimeout(() => {
-        // We use dynamic math here so the numbers actually change when you paste different sequences!
-        const simulatedThreat = 0.65 + (dynamicFeatures[0] * 0.3);
-        setThreatScore(simulatedThreat);
-        setR0(1.0 + (simulatedThreat * 2.5));
-        setLoading(false); // <--- Turns off the loading spinner after 1.5 seconds
-      }, 1500);
+      console.error("CRITICAL ERROR: Quantum engine failed to execute.", error);
+      alert("Failed to connect to Quantum Backend. Ensure the Render server is live.");
     }
+    setLoading(false);
   };
 
   const handleSendMessage = (e) => {
