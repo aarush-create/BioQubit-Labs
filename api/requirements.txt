@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+pennylane
+qiskit
+qiskit-nature
