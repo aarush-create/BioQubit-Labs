@@ -6,7 +6,7 @@ from pennylane import numpy as np
 
 app = FastAPI()
 
-# Allow Netlify frontend to talk to this backend
+# Security clearance for your Netlify frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -15,10 +15,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 4-Qubit Simulator
+# Initialize the 4-Qubit Quantum Device
 n_qubits = 4
 dev = qml.device("default.qubit", wires=n_qubits)
 
+# Define the Variational Quantum Circuit
 @qml.qnode(dev)
 def bio_threat_vqc(features, weights):
     qml.AngleEmbedding(features=features, wires=range(n_qubits), rotation='Y')
@@ -28,23 +29,23 @@ def bio_threat_vqc(features, weights):
 class Payload(BaseModel):
     features: list[float]
 
-# NEW: Health check endpoint to fix the 404 error
 @app.get("/")
-def read_root():
-    return {
-        "status": "online", 
-        "message": "Q-VIRA Quantum API is LIVE",
-        "active_endpoints": ["POST /predict"]
-    }
+def health_check():
+    return {"status": "online", "engine": "PennyLane Quantum Simulator"}
 
 @app.post("/predict")
 def predict(payload: Payload):
+    # Convert frontend sequence data into a quantum-ready array
     features = np.array(payload.features, requires_grad=False)
     
+    # Execute the circuit with randomized variational weights
     np.random.seed(42)
     weights = np.random.random((3, n_qubits), requires_grad=False)
+    
+    # RUN THE ACTUAL QUANTUM MATH
     raw_score = bio_threat_vqc(features, weights)
     
+    # Process quantum expectation value into epidemiological metrics
     threat_score = float((raw_score + 1) / 2)
     r0_projected = 1.0 + (threat_score * 2.5) 
     
