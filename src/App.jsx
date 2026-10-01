@@ -37,7 +37,7 @@ export default function App() {
   ]);
   const chatEndRef = useRef(null);
 
-  const runLiveQuantumEngine = async () => {
+const runLiveQuantumEngine = async () => {
     setLoading(true);
     
     // Dynamically calculate features based on the user's FASTA text input
@@ -50,8 +50,8 @@ export default function App() {
     ];
 
     try {
-      // IMPORTANT: Replace with your actual Render URL
-      const response = await fetch("https://q-vira-backend.onrender.com/predict", {
+      // If you don't have a backend, this will intentionally fail and trigger the catch block below
+      const response = await fetch("https://YOUR-RENDER-URL.onrender.com/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ features: dynamicFeatures }) 
@@ -60,15 +60,20 @@ export default function App() {
       const data = await response.json();
       setThreatScore(data.threat_score);
       setR0(data.r0);
+      setLoading(false); // <--- Successfully loaded from API
+      
     } catch (error) {
       console.error("Quantum backend offline, using simulated fallback for demo.");
+      
+      // Fallback animation for the demo video
       setTimeout(() => {
-        setThreatScore(0.84);
-        setR0(2.15);
-        setLoading(false);
+        // We use dynamic math here so the numbers actually change when you paste different sequences!
+        const simulatedThreat = 0.65 + (dynamicFeatures[0] * 0.3);
+        setThreatScore(simulatedThreat);
+        setR0(1.0 + (simulatedThreat * 2.5));
+        setLoading(false); // <--- Turns off the loading spinner after 1.5 seconds
       }, 1500);
     }
-    setLoading(false);
   };
 
   const handleSendMessage = (e) => {
