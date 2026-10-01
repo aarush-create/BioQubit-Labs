@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { 
   Activity, Dna, Play, Cpu, ShieldAlert, Syringe, MessageSquare, 
-  X, Send, Info, HelpCircle, ArrowRight
+  X, Send, Info, HelpCircle, ArrowRight, Printer
 } from 'lucide-react';
 
 // --- CUSTOM TOOLTIP COMPONENT ---
@@ -26,6 +26,10 @@ export default function App() {
   const [r0, setR0] = useState(1.2);
   const [showWelcome, setShowWelcome] = useState(true);
   
+  // Dynamic FASTA Sequence State
+  const [fastaInput, setFastaInput] = useState(">Spike_Protein_Variant_XBB\nMFVFLVLLPLVSSQCVNLTTRTQLPPAYTNSFTRGVYYPDKVFRSSVLHLTQDLFLPFFSNVTWFHAIHVSGTNGTKRFD...");
+  
+  // Chatbot State
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState([
@@ -35,12 +39,22 @@ export default function App() {
 
   const runLiveQuantumEngine = async () => {
     setLoading(true);
+    
+    // Dynamically calculate features based on the user's FASTA text input
+    const strLen = fastaInput.length;
+    const dynamicFeatures = [
+      (strLen % 100) / 100, 
+      (fastaInput.charCodeAt(strLen > 10 ? 10 : 0) % 20) / 10,
+      -(strLen % 50) / 50,
+      0.95
+    ];
+
     try {
-      // Replace with your Render URL: e.g., "https://q-vira-backend.onrender.com/predict"
-      const response = await fetch("https://q-vira-backend.onrender.com/predict", {
+      // IMPORTANT: Replace with your actual Render URL
+      const response = await fetch("https://YOUR-RENDER-URL.onrender.com/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ features: [0.78, 1.12, -0.34, 0.95] }) 
+        body: JSON.stringify({ features: dynamicFeatures }) 
       });
       
       const data = await response.json();
@@ -93,7 +107,7 @@ export default function App() {
       
       {/* WELCOME ONBOARDING MODAL */}
       {showWelcome && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 print:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative">
             <button onClick={() => setShowWelcome(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
               <X size={24} />
@@ -124,7 +138,7 @@ export default function App() {
                 <div className="bg-emerald-500/20 text-emerald-400 rounded-full w-8 h-8 flex items-center justify-center font-bold shrink-0">3</div>
                 <div>
                   <h3 className="font-bold text-white">Analyze & Prevent (SEIR & VQE Tabs)</h3>
-                  <p className="text-sm text-slate-400">View the projected epidemic outbreak curve and simulate quantum drug binding.</p>
+                  <p className="text-sm text-slate-400">View the projected epidemic outbreak curve and simulate 3D quantum drug binding.</p>
                 </div>
               </div>
             </div>
@@ -139,7 +153,7 @@ export default function App() {
       )}
 
       {/* HEADER */}
-      <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
+      <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 print:hidden">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20">
@@ -158,7 +172,12 @@ export default function App() {
             </button>
             <div className="h-6 w-px bg-slate-700"></div>
             <div className="flex items-center gap-3">
-              <span className="text-sm font-bold text-slate-400 hidden sm:block">Step 2:</span>
+              <button 
+                onClick={() => window.print()}
+                className="hidden sm:flex bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-sm font-bold py-2 px-4 rounded-lg items-center gap-2 transition-all"
+              >
+                <Printer size={16} /> Export Report
+              </button>
               <button 
                 onClick={runLiveQuantumEngine}
                 disabled={loading}
@@ -215,7 +234,7 @@ export default function App() {
         </div>
 
         {/* TABS */}
-        <div className="flex flex-wrap gap-2 bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-800 w-fit">
+        <div className="flex flex-wrap gap-2 bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-800 w-fit print:hidden">
           {[
             { id: 'genomics', label: '1. Genomics Ingestion' },
             { id: 'vqc', label: '2. Quantum Circuit (VQC)' },
@@ -253,7 +272,8 @@ export default function App() {
                 <div className="mb-2 text-sm font-bold text-slate-300">Target Viral FASTA Sequence:</div>
                 <textarea 
                   className="w-full h-48 bg-slate-950 border border-slate-700 rounded-xl p-4 text-cyan-400 font-mono text-sm focus:border-cyan-500 outline-none"
-                  defaultValue=">Spike_Protein_Variant_XBB\nMFVFLVLLPLVSSQCVNLTTRTQLPPAYTNSFTRGVYYPDKVFRSSVLHL..."
+                  value={fastaInput}
+                  onChange={(e) => setFastaInput(e.target.value)}
                 />
               </div>
               <div className="flex flex-col items-center justify-center border border-slate-800 rounded-xl bg-slate-950/50 p-4">
@@ -355,12 +375,21 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <div className="relative border border-slate-800 rounded-xl bg-slate-950 flex items-center justify-center min-h-[300px]">
-                {/* Simulated 3D Pocket View */}
-                <div className="absolute inset-0 bg-[url('https://upload.wikimedia.org/wikipedia/commons/3/30/SARS-CoV-2_spike_protein_closed_conformation.png')] bg-contain bg-no-repeat bg-center opacity-40 mix-blend-screen"></div>
-                <div className="z-10 text-center bg-slate-950/80 p-4 rounded-xl border border-slate-800 backdrop-blur-sm">
-                  <div className="w-12 h-12 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin mx-auto mb-3"></div>
-                  <span className="text-cyan-400 font-mono text-sm tracking-widest font-bold">VQE SIMULATION ACTIVE</span>
+              <div className="relative border border-slate-800 rounded-xl bg-slate-950 flex flex-col items-center justify-center min-h-[400px] overflow-hidden">
+                {/* Real 3D Interactive Protein Viewer */}
+                <iframe 
+                  src="https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=6m0j&showcommand=0&showmenu=0&showtitle=0" 
+                  width="100%" 
+                  height="100%" 
+                  className="absolute inset-0 z-0"
+                  title="3D Protein Structure"
+                ></iframe>
+                <div className="z-10 absolute bottom-4 left-4 bg-slate-900/90 p-3 rounded-lg border border-slate-700 backdrop-blur-md pointer-events-none">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></div>
+                    <span className="text-cyan-400 font-mono text-xs tracking-widest font-bold">VQE TARGET: PDB 6M0J</span>
+                  </div>
+                  <div className="text-slate-400 text-xs mt-1">Interactive 3D Render Active. Drag to rotate.</div>
                 </div>
               </div>
             </div>
@@ -369,7 +398,7 @@ export default function App() {
       </main>
 
       {/* AI COPILOT */}
-      <div className="fixed bottom-24 right-6 z-50">
+      <div className="fixed bottom-24 right-6 z-50 print:hidden">
         {!isChatOpen ? (
           <button 
             onClick={() => setIsChatOpen(true)}
