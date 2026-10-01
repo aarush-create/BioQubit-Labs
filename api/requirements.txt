@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+pydantic
 pennylane
-qiskit
-qiskit-nature
+pennylane-qiskit
+numpy
