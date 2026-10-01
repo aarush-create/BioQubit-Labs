@@ -6,7 +6,7 @@ from pennylane import numpy as np
 
 app = FastAPI()
 
-# Allow your Netlify frontend to talk to this backend
+# Allow Netlify frontend to talk to this backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -28,17 +28,23 @@ def bio_threat_vqc(features, weights):
 class Payload(BaseModel):
     features: list[float]
 
+# NEW: Health check endpoint to fix the 404 error
+@app.get("/")
+def read_root():
+    return {
+        "status": "online", 
+        "message": "Q-VIRA Quantum API is LIVE",
+        "active_endpoints": ["POST /predict"]
+    }
+
 @app.post("/predict")
 def predict(payload: Payload):
-    # Convert incoming frontend data to PennyLane array
     features = np.array(payload.features, requires_grad=False)
     
-    # Run the quantum circuit
     np.random.seed(42)
     weights = np.random.random((3, n_qubits), requires_grad=False)
     raw_score = bio_threat_vqc(features, weights)
     
-    # Calculate live outputs
     threat_score = float((raw_score + 1) / 2)
     r0_projected = 1.0 + (threat_score * 2.5) 
     
