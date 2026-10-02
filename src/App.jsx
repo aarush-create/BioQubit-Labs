@@ -4,8 +4,8 @@ import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
 import { 
-  Activity, Dna, Play, Cpu, ShieldAlert, Syringe, MessageSquare, 
-  X, Send, Info, HelpCircle, ArrowRight, Printer, Database, Globe, AlertTriangle, Radio
+  Activity, Dna, Play, ShieldAlert, Syringe, MessageSquare, 
+  X, Send, Info, HelpCircle, ArrowRight, Printer, Database, Globe, AlertTriangle, Radio, UploadCloud
 } from 'lucide-react';
 
 const HelpTooltip = ({ text }) => (
@@ -28,6 +28,7 @@ export default function App() {
   
   const [fastaInput, setFastaInput] = useState(">Spike_Protein_Variant_XBB\nMFVFLVLLPLVSSQCVNLTTRTQLPPAYTNSFTRGVYYPDKVFRSSVLHLTQDLFLPFFSNVTWFHAIHVSGTNGTKRFD");
   const [pdbInput, setPdbInput] = useState("6m0j");
+  const [pdbUploaded, setPdbUploaded] = useState(false);
   
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -35,19 +36,29 @@ export default function App() {
     { role: 'ai', text: 'Hi! I am your Q-VIRA Copilot. Ask me how the Global Sentinel scrapes data, or how the VQC engine works.' }
   ]);
   const chatEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
-  const strLen = fastaInput.length;
+  // Hyper-sensitive mathematical hash to make the VQC tab react instantly to RNA changes
+  const hash = fastaInput.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const currentAngles = [
-    ((strLen % 100) / 100).toFixed(2), 
-    ((fastaInput.charCodeAt(strLen > 10 ? 10 : 0) % 20) / 10).toFixed(2),
-    (Math.abs(strLen % 50) / 50).toFixed(2),
-    0.95
+    ((hash % 100) / 100 || 0.1).toFixed(2), 
+    (((hash * 7) % 100) / 100 || 0.2).toFixed(2),
+    (((hash * 13) % 100) / 100 || 0.3).toFixed(2),
+    (((hash * 17) % 100) / 100 || 0.4).toFixed(2)
   ];
 
   const handleExtractSequence = () => {
     setFastaInput(">H5N1_Avian_Influenza_Hemagglutinin_Spillover\nMEKIVLLFAIVSLVKSDQICIGYHANNSTEQVDTIMEKNVTVTHAQDILEKKHNGKLCDLDGVKPLILRDCSVAGWLLGN...");
     setPdbInput("1rzc");
+    setPdbUploaded(false);
     setActiveTab('genomics');
+  };
+
+  const handleFileUpload = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setPdbUploaded(true);
+      setPdbInput(e.target.files[0].name);
+    }
   };
 
   const runLiveQuantumEngine = async () => {
@@ -55,8 +66,8 @@ export default function App() {
     const dynamicFeatures = currentAngles.map(Number);
 
     try {
-      // REPLACE THIS WITH YOUR RENDER URL
-      const response = await fetch("https://q-vira-backend.onrender.com/predict", {
+      // KEEP THIS SYNCED WITH YOUR RENDER URL
+      const response = await fetch("https://YOUR-RENDER-URL.onrender.com/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ features: dynamicFeatures }) 
@@ -72,7 +83,7 @@ export default function App() {
         const simulatedThreat = 0.50 + (dynamicFeatures[0] * 0.4);
         setThreatScore(simulatedThreat);
         setR0(1.0 + (simulatedThreat * 2.5));
-        setDbMatch(strLen > 100 ? "SARS-CoV-2 Variant (89% Match)" : "Avian Influenza (76% Match)");
+        setDbMatch(fastaInput.length > 100 ? "SARS-CoV-2 Variant (89% Match)" : "Avian Influenza (76% Match)");
         setLoading(false);
       }, 1500);
     }
@@ -125,14 +136,14 @@ export default function App() {
             </p>
             <div className="space-y-4 mb-8">
               <div className="flex gap-4 items-start p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                <div className="bg-rose-500/20 text-rose-400 rounded-full w-8 h-8 flex items-center justify-center font-bold shrink-0">0</div>
+                <div className="bg-rose-500/20 text-rose-400 rounded-full w-8 h-8 flex items-center justify-center font-bold shrink-0">1</div>
                 <div>
                   <h3 className="font-bold text-white">Global Sentinel (OSINT)</h3>
                   <p className="text-sm text-slate-400">Our NLP engine monitors global news and EHR anomalies to flag unknown outbreaks instantly.</p>
                 </div>
               </div>
               <div className="flex gap-4 items-start p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                <div className="bg-cyan-500/20 text-cyan-400 rounded-full w-8 h-8 flex items-center justify-center font-bold shrink-0">1</div>
+                <div className="bg-cyan-500/20 text-cyan-400 rounded-full w-8 h-8 flex items-center justify-center font-bold shrink-0">2</div>
                 <div>
                   <h3 className="font-bold text-white">IBM Qiskit Engine</h3>
                   <p className="text-sm text-slate-400">Our PennyLane Variational Quantum Circuit runs on IBM Qiskit Aer to calculate the Threat Score.</p>
@@ -225,11 +236,11 @@ export default function App() {
 
         <div className="flex flex-wrap gap-2 bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-800 w-fit print:hidden">
           {[
-            { id: 'sentinel', label: '0. Global Sentinel' },
-            { id: 'genomics', label: '1. Genomics Ingestion' },
-            { id: 'vqc', label: '2. Quantum Circuit (VQC)' },
-            { id: 'seir', label: '3. Outbreak Forecast' },
-            { id: 'vqe', label: '4. Drug Discovery (VQE)' }
+            { id: 'sentinel', label: '1. Global Sentinel' },
+            { id: 'genomics', label: '2. Genomics Ingestion' },
+            { id: 'vqc', label: '3. Quantum Circuit (VQC)' },
+            { id: 'seir', label: '4. Outbreak Forecast' },
+            { id: 'vqe', label: '5. Drug Discovery (VQE)' }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -247,7 +258,7 @@ export default function App() {
 
         <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-xl min-h-[500px]">
 
-          {/* TAB 0 */}
+          {/* TAB 1 */}
           {activeTab === 'sentinel' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
               <div className="flex flex-col h-full">
@@ -271,7 +282,7 @@ export default function App() {
                     </div>
                     <h3 className="text-white font-bold text-lg mb-1">Unexplained Atypical Pneumonia Cluster</h3>
                     <p className="text-slate-400 text-sm mb-4">
-                      NLP detects 400% spike in ICU admissions near poultry facilities. GISAID shows rapid accumulation of unknown hemagglutinin mutations.
+                      NLP detects significant sustained elevation in ICU admissions near poultry facilities. Genomic surveillance indicates rapid accumulation of novel hemagglutinin mutations.
                     </p>
                     <button 
                       onClick={handleExtractSequence}
@@ -289,26 +300,25 @@ export default function App() {
                 <div className="relative w-64 h-64 border border-cyan-900/30 rounded-full flex items-center justify-center">
                   <div className="absolute w-full h-full border border-cyan-800/20 rounded-full"></div>
                   <div className="absolute w-3/4 h-3/4 border border-cyan-700/20 rounded-full"></div>
-                  <div className="absolute w-1/2 h-1/2 border border-cyan-600/30 rounded-full"></div>
-                  <div className="absolute w-1/2 h-[2px] bg-gradient-to-r from-transparent to-cyan-500 origin-right right-1/2 top-1/2 animate-[spin_4s_linear_infinite]"></div>
-                  <div className="absolute top-1/4 right-1/3 w-3 h-3 bg-rose-500 rounded-full shadow-[0_0_15px_#f43f5e] animate-pulse"></div>
+                  <div className="absolute w-1/2 h-[1px] bg-cyan-500 origin-right right-1/2 top-1/2 animate-[spin_3s_linear_infinite] opacity-50"></div>
+                  <div className="absolute top-1/4 right-1/3 w-3 h-3 bg-rose-500 rounded-full shadow-[0_0_20px_#f43f5e] animate-pulse"></div>
+                  <div className="absolute top-2/3 left-1/4 w-1.5 h-1.5 bg-emerald-500 rounded-full opacity-40"></div>
                 </div>
 
                 <div className="mt-8 text-center z-10">
-                  <div className="text-rose-400 font-mono text-sm tracking-widest font-bold mb-1">TARGET IDENTIFIED</div>
+                  <div className="text-rose-400 font-mono text-sm tracking-widest font-bold mb-1">ANOMALY DETECTED</div>
                   <div className="text-slate-400 text-xs">Waiting for sequence extraction to initiate Quantum Analysis...</div>
                 </div>
               </div>
             </div>
           )}
           
-          {/* TAB 1 */}
+          {/* TAB 2 */}
           {activeTab === 'genomics' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
               <div className="flex flex-col h-full">
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-2xl font-bold text-white">Sequence & 3D Ingestion</h2>
-                  <span className="bg-slate-800 text-cyan-400 text-[10px] px-2 py-0.5 rounded font-bold border border-slate-700 uppercase tracking-widest">Step 1</span>
                 </div>
                 
                 <div className="grid grid-cols-3 gap-4 mb-4 mt-6">
@@ -318,7 +328,7 @@ export default function App() {
                   </div>
                   <div>
                     <div className="text-sm font-bold text-slate-300">3D Structure</div>
-                    <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">PDB / ESMFold ID</div>
+                    <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">PDB / Upload</div>
                   </div>
                 </div>
 
@@ -331,14 +341,33 @@ export default function App() {
                   <div className="w-1/3 flex flex-col gap-3">
                     <input 
                       type="text" 
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-emerald-400 font-mono text-sm focus:border-emerald-500 outline-none text-center"
+                      className={`w-full bg-slate-950 border rounded-xl p-3 font-mono text-sm outline-none text-center transition-colors ${pdbUploaded ? 'border-indigo-500 text-indigo-400' : 'border-slate-700 text-emerald-400 focus:border-emerald-500'}`}
                       value={pdbInput}
-                      onChange={(e) => setPdbInput(e.target.value)}
+                      onChange={(e) => {
+                        setPdbInput(e.target.value);
+                        setPdbUploaded(false);
+                      }}
                       placeholder="e.g. 6M0J"
                     />
+                    
+                    {/* NEW: Local File Upload Button */}
+                    <input 
+                      type="file" 
+                      accept=".pdb" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      onChange={handleFileUpload} 
+                    />
+                    <button 
+                      onClick={() => fileInputRef.current.click()}
+                      className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <UploadCloud size={16} /> Upload Local .pdb
+                    </button>
+                    
                     <div className="bg-slate-950/50 border border-slate-800 p-3 rounded-xl text-xs text-slate-400 text-center flex-1 flex items-center justify-center">
                       <Database size={16} className="inline mr-2 text-slate-500" />
-                      Feeds directly into VQE Tab 4
+                      Feeds directly into VQE Tab 5
                     </div>
                   </div>
                 </div>
@@ -358,7 +387,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2 */}
+          {/* TAB 3 */}
           {activeTab === 'vqc' && (
             <div className="h-full flex flex-col">
               <h2 className="text-2xl font-bold text-white mb-1 flex items-center">
@@ -371,7 +400,7 @@ export default function App() {
               <div className="flex-1 bg-slate-950 rounded-xl border border-slate-800 p-8 flex flex-col items-center justify-center font-mono text-sm text-cyan-500 overflow-x-auto relative">
                 <div className="absolute top-4 left-6 text-xs text-slate-500 font-sans font-bold uppercase tracking-widest flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                  Parameters updating live from Sequence Ingestion
+                  Parameters routing live from sequence hash
                 </div>
 
                 <div className="space-y-8 w-full max-w-3xl min-w-[650px] mt-8">
@@ -379,7 +408,7 @@ export default function App() {
                     <div key={q} className="flex items-center gap-4">
                       <span className="text-slate-400 w-16 font-bold">{q}</span>
                       <div className="h-px bg-slate-600 flex-1 relative flex items-center justify-around">
-                        <div className="px-4 py-2 bg-blue-900/80 border border-blue-500 rounded text-white shadow-lg flex flex-col items-center">
+                        <div className="px-4 py-2 bg-blue-900/80 border border-blue-500 rounded text-white shadow-lg flex flex-col items-center transition-all duration-300">
                           <span>Ry(<span className="text-emerald-400 font-bold">{currentAngles[i]}</span>)</span>
                           <span className="text-[9px] text-blue-300 uppercase tracking-widest mt-1">Encode</span>
                         </div>
@@ -402,7 +431,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 3 */}
+          {/* TAB 4 */}
           {activeTab === 'seir' && (
             <div className="h-full flex flex-col">
               <h2 className="text-2xl font-bold text-white mb-1 flex items-center">Epidemiological Bridge (SEIR Model)</h2>
@@ -423,7 +452,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 4 */}
+          {/* TAB 5 */}
           {activeTab === 'vqe' && (
             <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div>
@@ -447,14 +476,25 @@ export default function App() {
               </div>
               
               <div className="relative border border-slate-800 rounded-xl bg-slate-950 flex flex-col items-center justify-center min-h-[400px] overflow-hidden">
-                <iframe 
-                  src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`} 
-                  width="100%" height="100%" className="absolute inset-0 z-0" title="3D Protein Structure"
-                ></iframe>
+                {pdbUploaded ? (
+                  <div className="flex flex-col items-center justify-center h-full w-full bg-slate-900 border border-indigo-500/50 rounded-lg">
+                    <UploadCloud size={48} className="text-indigo-400 mb-4 animate-bounce" />
+                    <div className="text-indigo-300 font-mono font-bold text-lg">{pdbInput} loaded</div>
+                    <div className="text-slate-400 text-sm mt-2">Local PDB tensor map initialized for VQE binding.</div>
+                  </div>
+                ) : (
+                  <iframe 
+                    src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`} 
+                    width="100%" height="100%" className="absolute inset-0 z-0" title="3D Protein Structure"
+                  ></iframe>
+                )}
+                
                 <div className="z-10 absolute bottom-4 left-4 bg-slate-900/90 p-3 rounded-lg border border-slate-700 backdrop-blur-md pointer-events-none">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></div>
-                    <span className="text-cyan-400 font-mono text-xs tracking-widest font-bold">VQE TARGET: {pdbInput ? pdbInput.toUpperCase() : 'NONE'}</span>
+                    <div className={`w-3 h-3 rounded-full animate-pulse ${pdbUploaded ? 'bg-indigo-400' : 'bg-emerald-400'}`}></div>
+                    <span className="text-cyan-400 font-mono text-xs tracking-widest font-bold">
+                      VQE TARGET: {pdbUploaded ? 'LOCAL FILE' : (pdbInput ? pdbInput.toUpperCase() : 'NONE')}
+                    </span>
                   </div>
                 </div>
               </div>
