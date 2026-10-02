@@ -19,5 +19,33 @@
     "vector": [0.95, 0.20, -0.80, 0.90],
     "primary_host": "Rousettus Aegyptiacus (Bats)",
     "transmission": "Fluid Exchange"
+  },
+  "Nipah Virus (NiV)": {
+    "ncbi_accession": "NC_002728.1",
+    "pdb_id": "7t9l",
+    "vector": [0.60, 0.30, -0.40, 0.70],
+    "primary_host": "Pteropus Bats",
+    "transmission": "Contaminated Food / Respiratory"
+  },
+  "Ebola Virus (Zaire ebolavirus)": {
+    "ncbi_accession": "NC_002549.1",
+    "pdb_id": "5kqv",
+    "vector": [0.90, 0.10, -0.70, 0.85],
+    "primary_host": "Human / Primates",
+    "transmission": "Direct Fluid Contact"
+  },
+  "Zika Virus (Asian Lineage)": {
+    "ncbi_accession": "KU321639.1",
+    "pdb_id": "5ire",
+    "vector": [0.45, 0.50, -0.30, 0.60],
+    "primary_host": "Aedes Mosquitoes",
+    "transmission": "Vector-borne / Fluid"
+  },
+  "MERS-CoV (Middle East Respiratory Syndrome)": {
+    "ncbi_accession": "NC_019843.3",
+    "pdb_id": "4kr0",
+    "vector": [0.88, 0.60, -0.45, 0.82],
+    "primary_host": "Dromedary Camels",
+    "transmission": "Respiratory Droplet"
   }
 }
