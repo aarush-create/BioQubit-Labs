@@ -7,7 +7,26 @@ import math
 import os
 import json
 
-app = FastAPI()
+# Import your autonomous sentinel script!
+from autonomous_sentinel import update_master_database
+
+# This runs your Sentinel automatically in the background while the API stays live
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Initializing Q-VIRA Background Autonomous Sentinel...")
+    scheduler = BackgroundScheduler()
+    # Schedule the sentinel to automatically run every 24 hours
+    scheduler.add_job(update_master_database, 'interval', hours=24)
+    scheduler.start()
+    
+    # We can also force it to run once immediately when the server boots:
+    # update_master_database() 
+    
+    yield
+    scheduler.shutdown()
+
+# Attach the lifespan runner to FastAPI
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
