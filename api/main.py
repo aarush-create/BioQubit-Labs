@@ -38,21 +38,24 @@ app.add_middleware(
 
 n_qubits = 4
 
-# IBM QISKIT INTEGRATION
+# --- IBM QUANTUM (QISKIT) INTEGRATION ---
 IBM_TOKEN = os.getenv("IBMQ_API_TOKEN")
 
 if IBM_TOKEN:
     try:
         from qiskit_ibm_runtime import QiskitRuntimeService
+        # Authenticate session with IBM Quantum Cloud
         service = QiskitRuntimeService(channel="ibm_quantum", token=IBM_TOKEN)
+        
+        # Compile PennyLane circuit to Qiskit Aer backend 
         dev = qml.device("qiskit.aer", wires=n_qubits)
         q_engine_status = "Authenticated: IBM Quantum Pipeline Active"
     except Exception as e:
         dev = qml.device("qiskit.aer", wires=n_qubits)
-        q_engine_status = "IBM Qiskit Aer Simulator (Fallback)"
+        q_engine_status = "Qiskit Aer Simulator (IBM Auth Fallback)"
 else:
     dev = qml.device("qiskit.aer", wires=n_qubits)
-    q_engine_status = "IBM Qiskit Aer Simulator (Local)"
+    q_engine_status = "IBM Qiskit Aer Simulator (Local Mode)"
 
 @qml.qnode(dev)
 def bio_threat_vqc(features, weights):
