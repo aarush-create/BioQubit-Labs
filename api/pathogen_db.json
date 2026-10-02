@@ -1,0 +1,23 @@
+{
+  "SARS-CoV-2 (Omicron XBB.1.5)": {
+    "ncbi_accession": "NC_045512.2",
+    "pdb_id": "6m0j",
+    "vector": [0.75, 0.90, -0.20, 0.95],
+    "primary_host": "Human",
+    "transmission": "Aerosol Respiratory"
+  },
+  "H5N1 Avian Influenza (Bird Flu)": {
+    "ncbi_accession": "NM_001039848.1",
+    "pdb_id": "1rzc",
+    "vector": [0.85, 0.40, -0.60, 0.80],
+    "primary_host": "Avian / Zoonotic Spillover",
+    "transmission": "Direct Contact / Droplet"
+  },
+  "Marburg Virus (Angola Strain)": {
+    "ncbi_accession": "DQ217792.1",
+    "pdb_id": "6bp2",
+    "vector": [0.95, 0.20, -0.80, 0.90],
+    "primary_host": "Rousettus Aegyptiacus (Bats)",
+    "transmission": "Fluid Exchange"
+  }
+}
