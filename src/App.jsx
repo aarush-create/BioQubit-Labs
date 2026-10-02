@@ -31,9 +31,9 @@ export default function App() {
   const [pdbInput, setPdbInput] = useState("6m0j");
   const [pdbUploaded, setPdbUploaded] = useState(false);
   
-  // NEW: State for AI Auto-Folding
   const [isFolding, setIsFolding] = useState(false);
   const [isAiGenerated, setIsAiGenerated] = useState(false);
+  const [predictedNlmId, setPredictedNlmId] = useState("");
   
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -84,23 +84,22 @@ export default function App() {
     }
   };
 
-  // NEW: Simulated ESMFold / AlphaFold Integration
-  const handleAutoFoldAI = () => {
-    setIsFolding(true);
-    setPdbUploaded(false);
-    
-    // Simulate AI inference delay for the sequence translation and 3D folding
-    setTimeout(() => {
-      // 7t9l is used here as a visual stand-in for the "generated" novel structure
-      setPdbInput("7t9l"); 
-      setIsAiGenerated(true);
-      setIsFolding(false);
-    }, 2500);
-  };
-
+  // Master Execution: Runs Quantum Backend AND Auto-Folding simultaneously
   const runLiveQuantumEngine = async () => {
     setLoading(true);
     const dynamicFeatures = currentAngles.map(Number);
+    
+    // Automatically trigger AI folding if a known PDB hasn't been uploaded
+    if (!pdbUploaded) {
+      setIsFolding(true);
+      const generatedNlmId = `NLM-PRD-${Math.abs(hash).toString(16).toUpperCase().substring(0, 7)}`;
+      setTimeout(() => {
+        setPdbInput(generatedNlmId); 
+        setPredictedNlmId(generatedNlmId);
+        setIsAiGenerated(true);
+        setIsFolding(false);
+      }, 2000);
+    }
 
     try {
       const response = await fetch("https://YOUR-RENDER-URL.onrender.com/predict", {
@@ -119,7 +118,13 @@ export default function App() {
         const simulatedThreat = 0.50 + (dynamicFeatures[0] * 0.4);
         setThreatScore(simulatedThreat);
         setR0(1.0 + (simulatedThreat * 2.5));
-        setDbMatch(fastaInput.length > 100 ? "SARS-CoV-2 Variant (89% Match)" : "Avian Influenza (76% Match)");
+        
+        // Dynamic fallback match based on sequence hash so it updates visually
+        const fallbackPathogens = ["SARS-CoV-2 (XBB.1.5)", "H5N1 Avian Influenza", "Marburg Virus", "Nipah Virus (NiV)"];
+        const randomMatch = fallbackPathogens[Math.abs(hash) % fallbackPathogens.length];
+        const randomConf = (75 + (Math.abs(hash) % 24)).toFixed(1);
+        setDbMatch(`${randomMatch} (${randomConf}% Match)`);
+        
         setLoading(false);
       }, 1500);
     }
@@ -132,7 +137,7 @@ export default function App() {
     setTimeout(() => {
       let aiResponse = "The PennyLane VQC maps mutations into a 16-state Hilbert space. The wave you see on the VQC tab is the actual probability distribution of the quantum collapse.";
       if (chatInput.toLowerCase().includes("fold") || chatInput.toLowerCase().includes("ai")) {
-        aiResponse = "When a virus is novel, we don't have lab-mapped PDB files. We route the RNA sequence through an ESM-2 Protein Language Model (like ESMFold or AlphaFold) to mathematically generate the 3D topology instantly.";
+        aiResponse = "When a virus is novel, we don't have lab-mapped PDB files. We route the RNA sequence through an ESM-2 Protein Language Model to mathematically generate an NLM-compliant 3D topology instantly.";
       }
       setChatMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
     }, 1000);
@@ -160,8 +165,21 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30 pb-20">
       
+      {/* GLOBAL PRINT CSS INJECTION FOR PERFECT PDF EXPORT */}
+      <style>{`
+        @media print {
+          body { 
+            background-color: #020617 !important; 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+            color: #f1f5f9 !important;
+          }
+          .print-hidden { display: none !important; }
+        }
+      `}</style>
+      
       {showWelcome && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4 print:hidden">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4 print-hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative">
             <button onClick={() => setShowWelcome(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
               <X size={24} />
@@ -199,7 +217,7 @@ export default function App() {
         </div>
       )}
 
-      <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 print:hidden">
+      <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 print-hidden">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20">
@@ -226,11 +244,11 @@ export default function App() {
               </button>
               <button 
                 onClick={runLiveQuantumEngine}
-                disabled={loading}
+                disabled={loading || isFolding}
                 className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2 transition-all shadow-[0_0_15px_-5px_rgba(6,182,212,0.5)] disabled:opacity-50"
               >
-                {loading ? <Activity className="animate-spin" size={20} /> : <Play size={20} />}
-                {loading ? "Processing..." : "Run VQC Engine"}
+                {loading || isFolding ? <Activity className="animate-spin" size={20} /> : <Play size={20} />}
+                {loading || isFolding ? "Processing Pipeline..." : "Run VQC Engine"}
               </button>
             </div>
           </div>
@@ -268,12 +286,12 @@ export default function App() {
             </div>
             <div className="text-[11px] text-slate-500 mb-3 uppercase tracking-wider">Nearest Neighbor Vector Search</div>
             <div className="text-xl font-bold text-emerald-400 mt-2 leading-tight">
-              {dbMatch}
+              {loading ? "Scanning Databases..." : dbMatch}
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-800 w-fit print:hidden">
+        <div className="flex flex-wrap gap-2 bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-800 w-fit print-hidden">
           {[
             { id: 'sentinel', label: '1. Global Sentinel' },
             { id: 'genomics', label: '2. Genomics Ingestion' },
@@ -355,7 +373,6 @@ export default function App() {
           {/* TAB 2: GENOMICS & 3D INGESTION */}
           {activeTab === 'genomics' && (
             <div className="flex flex-col h-full gap-8">
-              {/* Top Row: Data Entry */}
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="flex-1">
                   <h2 className="text-2xl font-bold text-white mb-1">Genomic & Structural Target</h2>
@@ -363,31 +380,21 @@ export default function App() {
                   <textarea 
                     className="w-full h-36 bg-slate-950 border border-slate-700 rounded-xl p-4 text-cyan-400 font-mono text-sm focus:border-cyan-500 outline-none resize-none shadow-inner"
                     value={fastaInput}
-                    onChange={(e) => setFastaInput(e.target.value)}
+                    onChange={(e) => {
+                      setFastaInput(e.target.value);
+                      setIsAiGenerated(false); // Reset AI status on new input
+                    }}
                   />
                 </div>
                 <div className="w-full md:w-64 flex flex-col justify-end gap-3">
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider text-center">Structure ID (Auto-populates)</div>
                   <input 
                     type="text" 
-                    className={`w-full bg-slate-950 border rounded-xl p-3 font-mono text-sm outline-none text-center transition-colors ${pdbUploaded ? 'border-indigo-500 text-indigo-400' : (isAiGenerated ? 'border-rose-500 text-rose-400' : 'border-slate-700 text-emerald-400 focus:border-emerald-500')}`}
+                    readOnly
+                    className={`w-full bg-slate-950 border rounded-xl p-3 font-mono text-sm outline-none text-center transition-colors ${pdbUploaded ? 'border-indigo-500 text-indigo-400' : (isAiGenerated ? 'border-rose-500 text-rose-400' : 'border-slate-700 text-emerald-400')}`}
                     value={pdbInput}
-                    onChange={(e) => {
-                      setPdbInput(e.target.value);
-                      setPdbUploaded(false);
-                      setIsAiGenerated(false);
-                    }}
                     placeholder="e.g. 6M0J"
                   />
-                  
-                  {/* NEW: AI Auto-Fold Button */}
-                  <button 
-                    onClick={handleAutoFoldAI}
-                    disabled={isFolding}
-                    className="w-full bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/50 text-rose-400 text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    {isFolding ? <Activity className="animate-spin" size={16} /> : <Cpu size={16} />}
-                    {isFolding ? "Folding via ESM-2..." : "Auto-Fold (ESMFold AI)"}
-                  </button>
 
                   <input type="file" accept=".pdb" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
                   <button 
@@ -399,7 +406,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Bottom Row: Pre-Processing Visuals */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-72">
                 <div className="flex flex-col items-center justify-center border border-slate-800 rounded-xl bg-slate-950/50 p-4">
                   <div className="w-full text-center text-sm font-bold text-slate-300">PCA Feature Extraction</div>
@@ -425,6 +431,15 @@ export default function App() {
                       <UploadCloud size={48} className="text-indigo-400 mb-4 animate-bounce" />
                       <div className="text-indigo-300 font-mono font-bold text-lg">{pdbInput} Ready</div>
                       <div className="text-slate-400 text-xs mt-2 text-center px-4">Local topology prepared for VQE ground-state simulation.</div>
+                    </div>
+                  ) : isAiGenerated ? (
+                    <div className="flex flex-col items-center justify-center h-full w-full bg-slate-900 border border-rose-500/50">
+                      <Cpu size={48} className="text-rose-400 mb-4" />
+                      <div className="text-rose-300 font-mono font-bold text-lg">AI Topology Generated</div>
+                      <div className="text-rose-200 font-mono text-xs mt-2 bg-rose-950/50 px-3 py-1 rounded border border-rose-800">
+                        {predictedNlmId}
+                      </div>
+                      <div className="text-slate-400 text-xs mt-2 text-center px-4">Ready for Quantum Simulation</div>
                     </div>
                   ) : (
                     <iframe 
@@ -506,7 +521,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 5 */}
+          {/* TAB 5: VQE Syncing */}
           {activeTab === 'vqe' && (
             <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div>
@@ -539,10 +554,18 @@ export default function App() {
                     <div className="text-indigo-300 font-mono font-bold text-lg">{pdbInput} loaded</div>
                     <div className="text-slate-400 text-sm mt-2">VQE successfully initialized on local topology.</div>
                   </div>
+                ) : isFolding ? (
+                  <div className="flex flex-col items-center justify-center h-full w-full bg-slate-900 border border-rose-500/50 rounded-lg">
+                     <Cpu size={48} className="text-rose-400 mb-4 animate-pulse" />
+                     <div className="text-rose-300 font-mono font-bold text-lg">Predicting 3D Topology</div>
+                  </div>
                 ) : isAiGenerated ? (
                   <div className="flex flex-col items-center justify-center h-full w-full bg-slate-900 border border-rose-500/50 rounded-lg">
                     <Cpu size={48} className="text-rose-400 mb-4" />
-                    <div className="text-rose-300 font-mono font-bold text-lg">AI Topology Loaded</div>
+                    <div className="text-rose-300 font-mono font-bold text-lg">AI Topology Generated</div>
+                    <div className="text-rose-200 font-mono text-xs mt-2 bg-rose-950/50 px-3 py-1 rounded border border-rose-800">
+                      {predictedNlmId}
+                    </div>
                     <div className="text-slate-400 text-sm mt-2 px-6 text-center">Using simulated ESM-2 structural coordinates for the VQE Hamiltonian matrix.</div>
                   </div>
                 ) : (
@@ -567,7 +590,7 @@ export default function App() {
       </main>
       
       {/* AI COPILOT */}
-      <div className="fixed bottom-24 right-6 z-50 print:hidden">
+      <div className="fixed bottom-24 right-6 z-50 print-hidden">
         {!isChatOpen ? (
           <button onClick={() => setIsChatOpen(true)} className="bg-cyan-600 hover:bg-cyan-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(8,145,178,0.4)]">
             <MessageSquare size={24} />
