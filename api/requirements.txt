@@ -1,6 +1,10 @@
 fastapi
 uvicorn
 pydantic
+requests
 pennylane
 pennylane-qiskit
+qiskit
+qiskit-aer
+qiskit-ibm-runtime
 numpy
