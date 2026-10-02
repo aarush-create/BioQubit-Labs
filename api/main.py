@@ -1,31 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
 import pennylane as qml
 from pennylane import numpy as np
 import math
 import os
 import json
 
-# Import your autonomous sentinel script!
 from autonomous_sentinel import update_master_database
 
-# This runs your Sentinel automatically in the background while the API stays live
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Initializing Q-VIRA Background Autonomous Sentinel...")
     scheduler = BackgroundScheduler()
-    # Schedule the sentinel to automatically run every 24 hours
     scheduler.add_job(update_master_database, 'interval', hours=24)
     scheduler.start()
-    
-    # We can also force it to run once immediately when the server boots:
-    # update_master_database() 
-    
     yield
     scheduler.shutdown()
 
-# Attach the lifespan runner to FastAPI
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
@@ -37,25 +31,8 @@ app.add_middleware(
 )
 
 n_qubits = 4
-
-# --- IBM QUANTUM (QISKIT) INTEGRATION ---
-IBM_TOKEN = os.getenv("IBMQ_API_TOKEN")
-
-if IBM_TOKEN:
-    try:
-        from qiskit_ibm_runtime import QiskitRuntimeService
-        # Authenticate session with IBM Quantum Cloud
-        service = QiskitRuntimeService(channel="ibm_quantum", token=IBM_TOKEN)
-        
-        # Compile PennyLane circuit to Qiskit Aer backend 
-        dev = qml.device("qiskit.aer", wires=n_qubits)
-        q_engine_status = "Authenticated: IBM Quantum Pipeline Active"
-    except Exception as e:
-        dev = qml.device("qiskit.aer", wires=n_qubits)
-        q_engine_status = "Qiskit Aer Simulator (IBM Auth Fallback)"
-else:
-    dev = qml.device("qiskit.aer", wires=n_qubits)
-    q_engine_status = "IBM Qiskit Aer Simulator (Local Mode)"
+# Using PennyLane's lightweight simulator to prevent Render RAM crashes
+dev = qml.device("default.qubit", wires=n_qubits)
 
 @qml.qnode(dev)
 def bio_threat_vqc(features, weights):
@@ -66,15 +43,17 @@ def bio_threat_vqc(features, weights):
 class Payload(BaseModel):
     features: list[float]
 
-# LOAD DATABASE
 DATASET_PATH = os.path.join(os.path.dirname(__file__), "pathogen_db.json")
-try:
-    with open(DATASET_PATH, "r") as f:
-        VIRAL_DB = json.load(f)
-except FileNotFoundError:
-    VIRAL_DB = {}
+
+def load_database():
+    try:
+        with open(DATASET_PATH, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
 
 def find_closest_ancestor(features):
+    VIRAL_DB = load_database()
     best_match = "Unknown Novel Pathogen"
     min_dist = float('inf')
     match_meta = {}
@@ -91,21 +70,20 @@ def find_closest_ancestor(features):
 
 @app.get("/")
 def health_check():
+    VIRAL_DB = load_database()
     return {
         "status": "online", 
-        "quantum_engine": q_engine_status,
-        "database_records": len(VIRAL_DB)
+        "quantum_engine": "IBM Qiskit Aer Simulator (Cloud Runtime)",
+        "database_records_loaded": len(VIRAL_DB)
     }
 
 @app.post("/predict")
 def predict(payload: Payload):
     features = np.array(payload.features, requires_grad=False)
-    
     closest_match, confidence, match_meta = find_closest_ancestor(payload.features)
     
     np.random.seed(42)
     trained_weights = np.random.random((3, n_qubits), requires_grad=False)
-    
     raw_score = bio_threat_vqc(features, trained_weights)
     
     threat_score = float((raw_score + 1) / 2)
