@@ -8,3 +8,4 @@ qiskit
 qiskit-aer
 qiskit-ibm-runtime
 numpy
+apscheduler
