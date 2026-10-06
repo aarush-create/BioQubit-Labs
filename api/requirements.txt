@@ -1,7 +1,27 @@
-fastapi
-uvicorn
-pydantic
-requests
-pennylane
-numpy
-apscheduler
+# Pinned deliberately, including TRANSITIVE dependencies.
+# Two of these pins exist because the unpinned version broke the build:
+#   autoray >= 0.8 removed NumpyMimic, which PennyLane 0.39 calls at import
+#   (AttributeError: module 'autoray.autoray' has no attribute 'NumpyMimic').
+#   Qiskit 1.0 removed qiskit.algorithms and opflow entirely.
+# Quantum libraries move fast. An unpinned install is how a demo works on
+# Monday and breaks on Friday.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+httpx==0.28.1
+
+numpy==1.26.4
+scipy==1.14.1
+pandas==2.2.3
+scikit-learn==1.6.0
+
+pennylane==0.39.0
+autoray==0.7.0          # REQUIRED PIN — see note above
+
+biopython==1.84         # Smith-Waterman alignment + BLOSUM62 in the sentinel
+
+# Local-only, NOT needed to serve the app:
+#   pyscf        — build_vqe_data.py (precomputes H2 Hamiltonians)
+#   jupyter      — notebooks/vqe_h2.ipynb
+#   matplotlib   — notebook plots

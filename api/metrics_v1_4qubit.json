@@ -1,0 +1,36 @@
+{
+  "data_source": "single_mut_effects.csv",
+  "is_synthetic": false,
+  "n_train": 2856,
+  "n_test": 946,
+  "split": "grouped by site (no site appears in both splits)",
+  "label": "bind_avg >= -1.0 (retains ACE2 binding)",
+  "features": "mutation-delta-v1 (dHydropathy, dCharge, dVolume, rel. position)",
+  "train_seconds": 3004.2,
+  "vqc": {
+    "accuracy": 0.6871,
+    "roc_auc": 0.5864,
+    "n_qubits": 4,
+    "n_layers": 3,
+    "n_parameters": 38,
+    "ansatz": "data-reuploading-StronglyEntanglingLayers"
+  },
+  "classical_baselines_same_features": {
+    "majority_class": {
+      "accuracy": 0.6839,
+      "roc_auc": 0.5
+    },
+    "logistic_regression": {
+      "accuracy": 0.6956,
+      "roc_auc": 0.569
+    },
+    "svm_rbf": {
+      "accuracy": 0.6913,
+      "roc_auc": 0.5971
+    },
+    "mlp": {
+      "accuracy": 0.6892,
+      "roc_auc": 0.6417
+    }
+  }
+}

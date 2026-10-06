@@ -1,0 +1,36 @@
+{
+  "data_source": "dms.csv",
+  "is_synthetic": false,
+  "n_train": 2856,
+  "n_test": 946,
+  "split": "grouped by site (no site appears in both splits)",
+  "label": "bind_avg >= -1.0 (retains ACE2 binding)",
+  "features": "mutation-delta-v2 cols=[4, 6, 2, 8] (['blosum62', 'wt_volume', 'delta_volume', 'ace2_distance'])",
+  "train_seconds": 803.8,
+  "vqc": {
+    "accuracy": 0.7326,
+    "roc_auc": 0.7506,
+    "n_qubits": 4,
+    "n_layers": 6,
+    "n_parameters": 74,
+    "ansatz": "data-reuploading-StronglyEntanglingLayers"
+  },
+  "classical_baselines_same_features": {
+    "majority_class": {
+      "accuracy": 0.6839,
+      "roc_auc": 0.5
+    },
+    "logistic_regression": {
+      "accuracy": 0.7304,
+      "roc_auc": 0.7799
+    },
+    "svm_rbf": {
+      "accuracy": 0.6913,
+      "roc_auc": 0.7504
+    },
+    "mlp": {
+      "accuracy": 0.7199,
+      "roc_auc": 0.7661
+    }
+  }
+}
