@@ -435,7 +435,12 @@ def copilot(req: CopilotRequest):
 
     import httpx
 
-    model = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
+    # Default to a FREE-TIER model. gemini-3.1-pro-preview is paid-tier only
+    # (Google AI Studio shows "Not available" on Free), and the copilot only
+    # explains numbers the other endpoints already computed -- it does no
+    # reasoning that needs a Pro model. Override with GEMINI_MODEL if you have
+    # billing enabled.
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     system = (
         "You are the Q-VIRA copilot, explaining a hybrid quantum-classical "
         "bioinformatics dashboard to a technical judge.\n"
