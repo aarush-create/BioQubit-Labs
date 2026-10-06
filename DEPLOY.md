@@ -86,7 +86,8 @@ MUST NOT be included:
 Environment:
 ```
 GEMINI_API_KEY  = from https://aistudio.google.com/apikey
-GEMINI_MODEL    = gemini-3.1-pro-preview
+GEMINI_MODEL    = gemini-2.5-flash     # free tier; Pro models need billing
+PYTHON_VERSION  = 3.12.8               # 3.13 has no numpy 1.26.4 wheel
 ALLOWED_ORIGINS = (fill in after step 6)
 ```
 

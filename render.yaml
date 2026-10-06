@@ -12,7 +12,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-3.1-pro-preview
+        value: gemini-2.5-flash
       - key: QVIRA_SHOTS
         value: "2048"
       # Ephemeral disk here, so the sentinel cache is built locally and

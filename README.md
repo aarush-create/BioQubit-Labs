@@ -101,7 +101,7 @@ Full ablations, including the configurations that lost, are in **[RESULTS.md](RE
   exact diagonalisation. Precomputed by build_vqe_data.py.
 ```
 
-Gemini 3.1 Pro powers the copilot (`/copilot`). It **explains** results and its
+Gemini powers the copilot (gemini-2.5-flash by default, which is on the free tier) (`/copilot`). It **explains** results and its
 system prompt forbids inventing numbers; every figure it quotes is passed in
 from the endpoints above.
 
