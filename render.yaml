@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: q-vira-api
+    runtime: python
+    rootDir: api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.1-pro-preview
+      - key: QVIRA_SHOTS
+        value: "2048"
+      # Ephemeral disk here, so the sentinel cache is built locally and
+      # committed rather than refreshed in production.
+      - key: ALLOW_SENTINEL_REFRESH
+        value: "0"

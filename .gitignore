@@ -1,3 +1,5 @@
+node_modules/
+dist/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -216,3 +218,22 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Q-VIRA
+.env.local
+.env
+api/data/
+# NOTE: api/weights.npz and api/metrics.json are COMMITTED on purpose.
+# The deployed API loads weights.npz at startup and serves metrics.json
+# at /metrics. Do not add them here.
+api/sentinel_cache.json
+api/SARS-CoV-2-RBD_DMS/
+
+# Virtual environments — never commit these (hundreds of MB of binaries)
+.venv/
+api/.venv/
+venv/
+ENV/
+
+# IDE
+*.iml
