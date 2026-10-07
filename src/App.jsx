@@ -929,7 +929,7 @@ export default function App() {
                         src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`}
                         width="100%" height="100%" title="3D Protein Structure"
                         className="absolute inset-0 z-0"
-                        style={{ transform: 'scale(1.45)', transformOrigin: 'center center' }}
+                        style={{ transform: 'scale(1.8)', transformOrigin: 'center center' }}
                       ></iframe>
 
                       <button
