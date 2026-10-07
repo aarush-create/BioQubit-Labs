@@ -51,7 +51,13 @@ export default function App() {
   const [sentinelError, setSentinelError] = useState(null);
   const [metrics, setMetrics] = useState(null);       // held-out results, from /metrics
   const [showMetrics, setShowMetrics] = useState(false);
-  const [structureFullscreen, setStructureFullscreen] = useState(false);         // backend self-report
+  const [structureFullscreen, setStructureFullscreen] = useState(false);
+  // Render's free tier sleeps after ~15 min idle and takes ~50s to wake. A
+  // first-time visitor would otherwise see the red "backend unavailable"
+  // banner and conclude the site is broken. We retry, and SAY what is
+  // happening while we wait.
+  const [waking, setWaking] = useState(true);
+  const [wakeSeconds, setWakeSeconds] = useState(0);         // backend self-report
   
   const [pdbInput, setPdbInput] = useState("6m0j");
   
@@ -213,27 +219,48 @@ export default function App() {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, isChatOpen]);
 
-  // Wake Render's free tier early so the judge's first click is not a 50s cold start.
+  // Warm the backend on load, retrying until it answers. A free-tier instance
+  // takes about 50s to wake from sleep; without this the first visitor sees an
+  // error banner for a working system.
   useEffect(() => {
-    fetch(`${API}/`).then(r => r.json()).then(setHealth).catch(() => setHealth(null));
-    // Reference sequences come from the backend, which got them from NCBI.
-    // Nothing is hardcoded in the frontend.
-    fetch(`${API}/references`)
-      .then(r => r.json())
-      .then(d => {
-        setRefList(d.references || []);
-        if (d.references?.length) setRefName(d.references[0].name);
-      })
-      .catch(() => setRefList([]));
-    // Cached surveillance feed. Served instantly; the timestamp is displayed
-    // so cached data is never mistaken for live data.
-    // Held-out metrics, so the numbers behind the score are on screen rather
-    // than only in the slide deck.
-    fetch(`${API}/metrics`).then(r => r.ok ? r.json() : null).then(setMetrics).catch(() => {});
-    fetch(`${API}/sentinel`)
-      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(new Error(d.detail))))
-      .then(setSentinel)
-      .catch(e => setSentinelError(e.message));
+    let cancelled = false;
+    let ticker = null;
+
+    const loadEverything = (h) => {
+      setHealth(h);
+      setWaking(false);
+      fetch(`${API}/metrics`).then(r => r.ok ? r.json() : null).then(setMetrics).catch(() => {});
+      fetch(`${API}/references`)
+        .then(r => r.json())
+        .then(d => {
+          setRefList(d.references || []);
+          if (d.references?.length) {
+            const firstValid = d.references.find(r => r.in_distribution) || d.references[0];
+            setRefName(firstValid.name);
+          }
+        })
+        .catch(() => setRefList([]));
+      fetch(`${API}/sentinel`)
+        .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(new Error(d.detail))))
+        .then(setSentinel)
+        .catch(e => setSentinelError(e.message));
+    };
+
+    const attempt = (n) => {
+      if (cancelled) return;
+      fetch(`${API}/`)
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`)))
+        .then(h => { if (!cancelled) loadEverything(h); })
+        .catch(() => {
+          // Up to ~2 minutes of retries, which comfortably covers a cold start.
+          if (!cancelled && n < 24) setTimeout(() => attempt(n + 1), 5000);
+          else if (!cancelled) { setWaking(false); setHealth(null); }
+        });
+    };
+
+    ticker = setInterval(() => setWakeSeconds(s => s + 1), 1000);
+    attempt(0);
+    return () => { cancelled = true; if (ticker) clearInterval(ticker); };
   }, []);
 
   // Real SEIR curve from scipy on the backend. The old version was
@@ -472,6 +499,22 @@ export default function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+
+        {waking && (
+          <div className="mb-6 p-4 bg-slate-900 border border-cyan-700/50 rounded-xl flex items-start gap-3">
+            <Cpu className="text-cyan-400 shrink-0 mt-0.5 animate-pulse" size={20} />
+            <div>
+              <div className="font-bold text-cyan-300">
+                Waking the analysis backend… {wakeSeconds}s
+              </div>
+              <div className="text-sm text-slate-400 mt-1">
+                The API runs on a free instance that sleeps when idle, so the first request
+                after a quiet period takes about 50 seconds. Everything loads automatically —
+                no need to refresh.
+              </div>
+            </div>
+          </div>
+        )}
 
         {apiError && (
           <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border ${
