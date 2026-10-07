@@ -927,9 +927,18 @@ export default function App() {
                       <iframe
                         key={pdbInput}
                         src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`}
-                        width="100%" height="100%" title="3D Protein Structure"
-                        className="absolute inset-0 z-0"
-                        style={{ transform: 'scale(1.8)', transformOrigin: 'center center' }}
+                        title="3D Protein Structure"
+                        className="absolute z-0 border-0"
+                        style={{
+                          // Render the frame LARGER and crop it, rather than
+                          // transform: scale(), which stretches the finished
+                          // bitmap and looks blurry. iCn3D fits the molecule to
+                          // its canvas, so a bigger canvas draws the structure
+                          // at more pixels; the parent's overflow-hidden trims
+                          // the empty margin around it.
+                          width: '165%', height: '165%',
+                          left: '-32.5%', top: '-32.5%',
+                        }}
                       ></iframe>
 
                       <button
