@@ -298,7 +298,7 @@ export default function App() {
           </div>
           <iframe
             key={`fs-${pdbInput}`}
-            src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showtitle=0&closepopup=1`}
+            src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showtitle=0`}
             className="flex-1 w-full border-0" title="3D Protein Structure, fullscreen"
           ></iframe>
         </div>
@@ -872,7 +872,7 @@ export default function App() {
 </div>
                 </div>
 
-                <div className="relative border border-slate-800 rounded-xl bg-slate-950 flex flex-col items-center justify-center overflow-hidden min-h-[520px] lg:min-h-[680px]">
+                <div className="relative border border-slate-800 rounded-xl bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
                   {isFolding ? (
                     <div className="flex flex-col items-center justify-center h-full w-full bg-slate-900 border border-rose-500/50">
                       <Cpu size={48} className="text-rose-400 mb-4 animate-pulse" />
@@ -883,8 +883,10 @@ export default function App() {
                     <>
                       <iframe
                         key={pdbInput}
-                        src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0&width=100%&height=100%&closepopup=1`}
-                        width="100%" height="100%" className="absolute inset-0 z-0" title="3D Protein Structure"
+                        src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`}
+                        width="100%" height="100%" title="3D Protein Structure"
+                        className="absolute inset-0 z-0"
+                        style={{ transform: 'scale(1.45)', transformOrigin: 'center center' }}
                       ></iframe>
 
                       <button
