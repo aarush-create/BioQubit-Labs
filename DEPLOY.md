@@ -87,8 +87,38 @@ Environment:
 ```
 GEMINI_API_KEY  = from https://aistudio.google.com/apikey
 GEMINI_MODEL    = gemini-2.5-flash     # free tier; Pro models need billing
+XAI_API_KEY     = from https://console.x.ai   # fallback when Gemini is down
 PYTHON_VERSION  = 3.12.8               # 3.13 has no numpy 1.26.4 wheel
 ALLOWED_ORIGINS = (fill in after step 6)
+```
+
+### Copilot fallback
+
+The copilot tries Gemini first and falls through to Grok on any failure — a
+quota reset, a 429, a timeout, a renamed model. Either key alone is enough;
+with both, a demo survives one provider going down mid-question. The reply
+says which provider answered, so a fall-through is visible rather than hidden.
+
+Optional:
+
+```
+XAI_MODEL     = grok-4.7          # on a model error the chain asks /v1/models
+                                  # what this key can use and retries once
+COPILOT_ORDER = gemini,grok       # reorder, or name one provider to pin it
+```
+
+### Surveillance feed
+
+The feed seeds from the committed `sentinel_cache.json` and refreshes itself on
+a background thread once the cache passes `SENTINEL_MAX_AGE_HOURS` (12 by
+default). A page load is always served from memory, so nothing ever waits on
+NCBI. This host's disk is ephemeral, so the fresh payload lives in memory and a
+restart falls back to the committed cache and refreshes again.
+
+```
+SENTINEL_AUTO_REFRESH    = 1      # 0 pins the feed to the committed cache
+SENTINEL_MAX_AGE_HOURS   = 12
+SENTINEL_MIN_RETRY_SECONDS = 900  # floor between NCBI queries
 ```
 
 Deploy, then open the Render URL. It must show `"model_trained": true`.
