@@ -1,28 +1,90 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   AreaChart, Area
 } from 'recharts';
-import { 
-  Activity, Dna, Play, Syringe, MessageSquare, 
-  X, Send, Info, Maximize2, HelpCircle, ArrowRight, AlertTriangle, Radio, Cpu
-} from 'lucide-react';
 
-const HelpTooltip = ({ text }) => (
-  <div className="group relative inline-flex items-center justify-center ml-2 cursor-help">
-    <Info size={14} className="text-slate-500 hover:text-cyan-400 transition-colors" />
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 text-slate-200 text-xs rounded-lg border border-slate-700 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-      {text}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-    </div>
-  </div>
-);
+/* Palette, shared with index.css. Recharts needs real values, not CSS vars. */
+const C = {
+  ink: '#15191a', ink2: '#58615d', ink3: '#868e89',
+  rule: '#c4cabf', sheet: '#f6f7f3', paper: '#e8ebe4',
+  assay: '#1b4d5a', assaySoft: '#d8e4e5',
+  flag: '#8a5a12', alarm: '#8e2f2a', ok: '#2f6b43',
+};
 
-// Backend base URL. Set VITE_API_URL in Vercel (Project > Settings > Environment
-// Variables) to your Render URL. Never hardcode it: the old build shipped a
-// dead URL and silently fabricated numbers when it failed.
+const axis = { stroke: C.rule, tick: { fill: C.ink2, fontSize: 11 } };
+const tipStyle = {
+  background: C.paper, border: `1px solid ${C.ink}`, borderRadius: 2,
+  fontSize: 12, color: C.ink, fontFamily: 'IBM Plex Mono, monospace',
+};
+
+/* Backend base URL. Set VITE_API_URL in Vercel (Project > Settings >
+   Environment Variables) to the Render URL. Never hardcode it: an early build
+   shipped a dead URL and silently fabricated numbers when it failed. */
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+
+const DOMAIN = { start: 331, end: 531 };
+
+/* The backend's keys are snake_case identifiers; these are what a reader
+   should see on the model card. */
+const BASELINE_NAME = {
+  logistic_regression: 'Logistic regression',
+  mlp: 'Neural network (MLP)',
+  svm_rbf: 'Support vector machine (RBF)',
+  majority_class: 'Always answer yes (chance)',
+};
+
+/* SEIR populations run to eight figures; raw ticks overflow the axis. */
+const compact = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return v;
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1)}M`;
+  if (Math.abs(n) >= 1e3) return `${Math.round(n / 1e3)}k`;
+  return String(Math.round(n));
+};
+
+/* The trained domain drawn as a position ruler, with each scored substitution
+   marked where it actually sits. This is what a virologist reads first: where
+   in the receptor-binding domain the change landed. */
+function DomainRuler({ mutations }) {
+  const span = DOMAIN.end - DOMAIN.start;
+  const at = (pos) => Math.min(100, Math.max(0, ((pos - DOMAIN.start) / span) * 100));
+  const ticks = [350, 375, 400, 425, 450, 475, 500, 525];
+
+  return (
+    <div className="ruler" aria-hidden="true">
+      <div className="ruler-line" />
+      {ticks.map(t => <div key={t} className="ruler-tick" style={{ left: `${at(t)}%` }} />)}
+      <div className="ruler-end" style={{ left: 0 }}>spike {DOMAIN.start}</div>
+      <div className="ruler-end" style={{ right: 0 }}>{DOMAIN.end}</div>
+      {mutations.map(m => {
+        const pos = parseInt(String(m.mutation).slice(1, -1), 10);
+        if (!Number.isFinite(pos)) return null;
+        const out = m.in_trained_domain === false;
+        const left = at(pos);
+        const shift = left > 85 ? 'translateX(-90%)' : left < 6 ? 'translateX(-10%)' : 'translateX(-50%)';
+        return (
+          <React.Fragment key={m.mutation}>
+            <div className={`ruler-mark${out ? ' is-out' : ''}`} style={{ left: `${left}%` }} />
+            <div className={`ruler-flag${out ? ' is-out' : ''}`} style={{ left: `${left}%`, transform: shift }}>
+              {m.mutation}
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function Bar({ value, flagged }) {
+  const pct = Math.max(0, Math.min(1, Number(value) || 0)) * 100;
+  return (
+    <div className="bar">
+      <div className={`bar-fill${flagged ? ' is-flagged' : ''}`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('sentinel');
@@ -32,59 +94,53 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [apiError, setApiError] = useState(null);
   const [apiErrorKind, setApiErrorKind] = useState('offline');
-  const [refList, setRefList] = useState([]);        // references from the backend
+  const [refList, setRefList] = useState([]);
   const [refName, setRefName] = useState('');
-  const [mutationInput, setMutationInput] = useState('N501Y');     // shown as a banner, never hidden
-  const [result, setResult] = useState(null);         // full /predict payload
-  const [seir, setSeir] = useState(null);             // full /seir payload
+  const [mutationInput, setMutationInput] = useState('N501Y');
+  const [result, setResult] = useState(null);
+  const [seir, setSeir] = useState(null);
   const [health, setHealth] = useState(null);
   const [vqeResult, setVqeResult] = useState(null);
   const [vqeCurve, setVqeCurve] = useState(null);
   const [vqeBond, setVqeBond] = useState(0.7414);
   const [vqeBusy, setVqeBusy] = useState(false);
   const [vqeError, setVqeError] = useState(null);
-  // Which VQE view is showing. Previously both rendered stacked, so clicking
-  // "full curve" after a single result appended it far below the fold and
-  // looked like nothing happened.
   const [vqeView, setVqeView] = useState('single');
   const [sentinel, setSentinel] = useState(null);
   const [sentinelError, setSentinelError] = useState(null);
-  const [metrics, setMetrics] = useState(null);       // held-out results, from /metrics
+  const [sentinelBusy, setSentinelBusy] = useState(false);
+  const [metrics, setMetrics] = useState(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [structureFullscreen, setStructureFullscreen] = useState(false);
-  // Render's free tier sleeps after ~15 min idle and takes ~50s to wake. A
-  // first-time visitor would otherwise see the red "backend unavailable"
-  // banner and conclude the site is broken. We retry, and SAY what is
-  // happening while we wait.
+  /* Render's free tier sleeps after ~15 min idle and takes ~50s to wake. A
+     first-time visitor would otherwise see "backend unavailable" and conclude
+     the site is broken. We retry, and say what is happening while we wait. */
   const [waking, setWaking] = useState(true);
-  const [wakeSeconds, setWakeSeconds] = useState(0);         // backend self-report
-  
-  const [pdbInput, setPdbInput] = useState("6m0j");
-  
+  const [wakeSeconds, setWakeSeconds] = useState(0);
+
+  const [pdbInput, setPdbInput] = useState('6m0j');
   const [isFolding, setIsFolding] = useState(false);
-  
-  
+
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
   const [chatMessages, setChatMessages] = useState([
-    { role: 'ai', text: 'I explain this dashboard using only the numbers the backend actually computed. Run the engine first, then ask me about the score, the circuit, or the SEIR assumptions.' }
+    { role: 'ai', text: 'I explain this dashboard using only the numbers the backend actually computed. Score a variant first, then ask me about the result, the circuit, or the SEIR assumptions.' }
   ]);
   const chatEndRef = useRef(null);
 
-  // The 16-state distribution comes from the BACKEND, computed by the same
-  // circuit that produces the score. The old build generated this curve with
-  // a sin/cos formula in JavaScript and labelled it the quantum state.
+  /* The 16-state distribution comes from the BACKEND, computed by the same
+     circuit that produces the score. An early build generated this curve with
+     a sin/cos formula in JavaScript and labelled it the quantum state. */
   const quantumWaveformData = result?.state_distribution ?? [];
-
 
   const runLiveQuantumEngine = async () => {
     setLoading(true);
     setApiError(null);
 
     {
-      // Pick a reference structure to display. This is a LOOKUP for the 3D
-      // viewer, not a structure prediction -- the UI labels it as such.
+      /* Pick a reference structure for the 3D viewer. This is a LOOKUP, not a
+         structure prediction — the interface says so. */
       setIsFolding(true);
       const known = { '6m0j': 1, '1rzc': 1, '5ire': 1, '6bp2': 1, '5kqv': 1, '7t9l': 1, '4kr0': 1 };
       setTimeout(() => {
@@ -94,8 +150,9 @@ export default function App() {
     }
 
     try {
-      // Send the SEQUENCE. The backend featurises it with real physicochemical
-      // descriptors; the old build sent a character-sum hash computed here.
+      /* Send the SUBSTITUTIONS. The backend featurises them with real
+         physicochemical descriptors; an early build sent a character-sum hash
+         computed in the browser. */
       const res = await fetch(`${API}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,9 +165,8 @@ export default function App() {
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
         const err = new Error(detail.detail || `Backend returned ${res.status}`);
-        // 4xx means the backend answered and rejected the INPUT. Labelling that
-        // "backend unavailable" blames the wrong thing and sends the user
-        // looking for a connection problem that does not exist.
+        /* 4xx means the backend answered and rejected the INPUT. Calling that
+           "backend unavailable" blames the wrong thing. */
         err.isValidation = res.status >= 400 && res.status < 500;
         throw err;
       }
@@ -119,8 +175,8 @@ export default function App() {
       setResult(data);
       setThreatScore(data.threat_score);
 
-      // R0 is a SCENARIO parameter chosen from the score, not a prediction.
-      // Stated range 0.8-4.0 so the mapping is explicit and auditable.
+      /* R0 is a SCENARIO parameter chosen from the score, not a prediction.
+         Range 0.8–4.0, stated so the mapping is auditable. */
       const scenarioR0 = 0.8 + data.threat_score * 3.2;
       setR0(scenarioR0);
 
@@ -131,19 +187,18 @@ export default function App() {
       });
       if (seirRes.ok) setSeir(await seirRes.json());
     } catch (err) {
-      // No fabricated fallback either way, but say WHICH thing went wrong.
       setApiError(err.message || 'Could not reach the Q-VIRA backend.');
       setApiErrorKind(err.isValidation ? 'input' : 'offline');
       setResult(null);
       setSeir(null);
     } finally {
-      setLoading(false);   // THE BUG: this previously only ran in catch,
-      setIsFolding(false); // so a SUCCESSFUL run left the UI spinning forever.
+      setLoading(false);
+      setIsFolding(false);
     }
   };
 
   const runVqe = async (mode) => {
-    if (vqeBusy) return;                       // ignore repeat clicks in flight
+    if (vqeBusy) return;
     setVqeView(mode === 'curve' ? 'curve' : 'single');
     setVqeBusy(true); setVqeError(null);
     const ctrl = new AbortController();
@@ -165,11 +220,33 @@ export default function App() {
       }
     } catch (err) {
       setVqeError(err.name === 'AbortError'
-        ? 'The VQE request timed out after 20s.'
+        ? 'The VQE request timed out after 20 seconds.'
         : err.message);
     } finally {
       clearTimeout(timer);
       setVqeBusy(false);
+    }
+  };
+
+  /* The backend refreshes the feed on a worker thread, so ask and then poll
+     rather than holding a request open for an NCBI round trip. */
+  const refreshSentinel = async () => {
+    if (sentinelBusy) return;
+    setSentinelBusy(true);
+    try {
+      await fetch(`${API}/sentinel/refresh`, { method: 'POST' });
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const r = await fetch(`${API}/sentinel`);
+        if (!r.ok) break;
+        const data = await r.json();
+        setSentinel(data);
+        if (!data.feed_status?.refreshing) break;
+      }
+    } catch {
+      /* leave the current feed on screen; it is still the best data we have */
+    } finally {
+      setSentinelBusy(false);
     }
   };
 
@@ -183,9 +260,9 @@ export default function App() {
     setChatBusy(true);
 
     try {
-      // Gemini EXPLAINS; it never computes. We pass the current run's real
-      // numbers as context and the backend system prompt forbids inventing
-      // figures. The old version returned two hardcoded strings.
+      /* The model EXPLAINS; it never computes. We pass the current run's real
+         numbers as context and the backend system prompt forbids inventing
+         figures. An early version returned two hardcoded strings. */
       const res = await fetch(`${API}/copilot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,11 +281,14 @@ export default function App() {
         throw new Error(d.detail || `Copilot error ${res.status}`);
       }
       const data = await res.json();
-      setChatMessages(prev => [...prev, { role: 'ai', text: data.answer }]);
+      setChatMessages(prev => [...prev, {
+        role: 'ai', text: data.answer,
+        meta: data.provider ? `${data.provider}${data.fell_back ? ', after the primary failed' : ''}` : null
+      }]);
     } catch (err) {
       setChatMessages(prev => [...prev, {
         role: 'ai',
-        text: `I could not reach the copilot service (${err.message}). I won't guess at an answer.`
+        text: `I could not reach the copilot (${err.message}). I won't guess at an answer.`
       }]);
     } finally {
       setChatBusy(false);
@@ -219,9 +299,7 @@ export default function App() {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, isChatOpen]);
 
-  // Warm the backend on load, retrying until it answers. A free-tier instance
-  // takes about 50s to wake from sleep; without this the first visitor sees an
-  // error banner for a working system.
+  /* Warm the backend on load, retrying until it answers. */
   useEffect(() => {
     let cancelled = false;
     let ticker = null;
@@ -252,7 +330,6 @@ export default function App() {
         .then(r => r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`)))
         .then(h => { if (!cancelled) loadEverything(h); })
         .catch(() => {
-          // Up to ~2 minutes of retries, which comfortably covers a cold start.
           if (!cancelled && n < 24) setTimeout(() => attempt(n + 1), 5000);
           else if (!cancelled) { setWaking(false); setHealth(null); }
         });
@@ -263,1007 +340,808 @@ export default function App() {
     return () => { cancelled = true; if (ticker) clearInterval(ticker); };
   }, []);
 
-  // Real SEIR curve from scipy on the backend. The old version was
-  // 100 * R0^(day/8): a bare exponential that never peaks.
+  /* Real SEIR curve from scipy on the backend. An early version was
+     100 * R0^(day/8): a bare exponential that never peaks. */
   const seirData = seir?.curve ?? [];
 
-  // Real descriptors, normalised to the documented clamp ranges in
-  // features.py. The old radar relabelled one number as four invented
-  // biological properties ("Immune Escape", "Codon Bias") it never computed.
-  // The four descriptors the model ACTUALLY uses, normalised to the fixed
-  // clamp ranges in mutation_features.py. Chosen by ablation, not intuition.
+  /* The four descriptors the model ACTUALLY uses, normalised to the fixed
+     clamp ranges in mutation_features.py. Chosen by ablation, not intuition.
+     ACE2 distance is inverted so "closer to the interface" reads as a longer
+     spoke. */
   const d = result?.features?.descriptors;
   const featureData = d ? [
     { subject: 'BLOSUM62', A: ((d.blosum62 + 4) / 15) * 100, fullMark: 100 },
     { subject: 'WT volume', A: ((d.wt_volume - 60) / 168) * 100, fullMark: 100 },
     { subject: 'Δ volume', A: ((d.delta_volume + 170) / 340) * 100, fullMark: 100 },
-    // 4th axis is ACE2 interface distance, INVERTED so that "closer to the
-    // interface" reads as a larger spoke. relative_position was replaced by
-    // this feature; reading the old key rendered NaN.
     { subject: 'ACE2 proximity', A: Math.max(0, (1 - d.ace2_distance / 45) * 100), fullMark: 100 },
   ] : [];
 
+  const feedStatus = sentinel?.feed_status;
+  const outOfDomain = result?.distribution && !result.distribution.in_distribution;
+
+  const TABS = [
+    { id: 'sentinel', label: 'Surveillance feed' },
+    { id: 'genomics', label: 'Score a variant' },
+    { id: 'vqc', label: 'The circuit' },
+    { id: 'seir', label: 'Epidemic scenario' },
+    { id: 'vqe', label: 'Quantum chemistry' },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30 pb-20">
-      
-      <style>{`
-        @media print {
-          body { 
-            background-color: #020617 !important; 
-            -webkit-print-color-adjust: exact !important; 
-            print-color-adjust: exact !important; 
-            color: #f1f5f9 !important;
-          }
-          .print-hidden { display: none !important; }
-          /* Printing: keep panels intact and force a readable light rendering
-             rather than a page of dark boxes. */
-          body { background: #fff !important; }
-          .custom-scrollbar { overflow: visible !important; max-height: none !important; }
-          section, .recharts-wrapper { break-inside: avoid; page-break-inside: avoid; }
-        }
-      `}</style>
-      
+    <>
+      {/* ------------------------------------------- structure, full screen */}
       {structureFullscreen && (
-        <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col print-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 shrink-0">
-            <div>
-              <div className="text-white font-bold">
-                {(pdbInput || '6m0j').toUpperCase()}
-                <span className="text-slate-500 font-normal text-sm ml-3">
-                  experimentally-solved structure · RCSB PDB
-                </span>
+        <div className="overlay print-hidden" style={{ padding: 0, background: C.ink }}>
+          <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                          gap: '1rem', padding: '0.75rem 1.25rem', borderBottom: `1px solid ${C.ink2}`, color: C.paper }}>
+              <div>
+                <div className="mono" style={{ fontWeight: 600 }}>{(pdbInput || '6m0j').toUpperCase()}</div>
+                <div className="small" style={{ color: C.ink3, maxWidth: '70ch' }}>
+                  Experimentally solved structure from the RCSB PDB. Drag to rotate, scroll to zoom.
+                  The ACE2 interface distances the model reads were measured from this complex.
+                </div>
               </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
-                Drag to rotate · scroll to zoom · the ACE2 interface distances used by the model
-                were measured from this complex
-              </div>
+              <button className="btn btn-ghost btn-sm" style={{ color: C.paper, borderColor: C.ink2 }}
+                      onClick={() => setStructureFullscreen(false)}>Close</button>
             </div>
-            <button onClick={() => setStructureFullscreen(false)}
-              className="flex items-center gap-2 text-slate-400 hover:text-white text-sm px-3 py-1.5 rounded hover:bg-slate-800 transition">
-              <X size={18} /> Close
-            </button>
+            <iframe
+              key={`fs-${pdbInput}`}
+              src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showtitle=0`}
+              style={{ flex: 1, width: '100%', border: 0 }} title="Protein structure, full screen"
+            />
           </div>
-          <iframe
-            key={`fs-${pdbInput}`}
-            src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showtitle=0`}
-            className="flex-1 w-full border-0" title="3D Protein Structure, fullscreen"
-          ></iframe>
         </div>
       )}
 
+      {/* -------------------------------------------------------- model card */}
       {showMetrics && metrics && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 print-hidden"
-             onClick={() => setShowMetrics(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-7 max-w-2xl w-full max-h-[85vh] overflow-y-auto custom-scrollbar"
-               onClick={e => e.stopPropagation()}>
-            <div className="flex items-start justify-between mb-1">
-              <h2 className="text-2xl font-bold text-white">Model card</h2>
-              <button onClick={() => setShowMetrics(false)} className="text-slate-500 hover:text-white"><X size={20}/></button>
+        <div className="overlay print-hidden" onClick={() => setShowMetrics(false)}>
+          <div className="dialog custom-scrollbar" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+              <h2 style={{ fontSize: 'var(--t-lg)' }}>Model card</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowMetrics(false)}>Close</button>
             </div>
-            <div className="text-[11px] text-slate-500 mb-5">
-              Held-out results from the last training run, served live from <code>/metrics</code>.
-              Nothing here is typed by hand.
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-5 text-xs">
-              {[['Trained on', metrics.data_source],
-                ['Predicts', metrics.label],
-                ['Split', metrics.split],
-                ['Train / test', `${metrics.n_train} / ${metrics.n_test} rows`]].map(([k, v]) => (
-                <div key={k} className="bg-slate-950 border border-slate-800 rounded-lg p-3">
-                  <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">{k}</div>
-                  <div className="text-slate-300 leading-snug">{v}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="text-xs font-bold text-slate-300 mb-2">
-              Held-out ROC-AUC — identical features, identical split
-            </div>
-            <div className="space-y-1.5 mb-2">
-              {[{ name: 'VQC (quantum, 4 qubits)', auc: metrics.vqc?.roc_auc, us: true },
-                ...Object.entries(metrics.classical_baselines_same_features || {})
-                  .map(([n, m]) => ({ name: n.replace(/_/g, ' '), auc: m.roc_auc, us: false }))]
-                .sort((a, b) => (b.auc || 0) - (a.auc || 0))
-                .map(row => (
-                <div key={row.name} className="flex items-center gap-3">
-                  <div className={`w-44 text-[11px] shrink-0 ${row.us ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}>
-                    {row.name}
-                  </div>
-                  <div className="flex-1 h-5 bg-slate-950 rounded overflow-hidden border border-slate-800 min-w-0">
-                    <div className={`h-full ${row.us ? 'bg-cyan-500' : 'bg-slate-700'}`}
-                         style={{ width: `${Math.max(0, ((row.auc - 0.5) / 0.5) * 100)}%` }} />
-                  </div>
-                  <div className={`w-14 text-right text-[11px] font-mono ${row.us ? 'text-cyan-300' : 'text-slate-400'}`}>
-                    {row.auc?.toFixed(4)}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="text-[10px] text-slate-600 mb-5">
-              Bars are scaled from 0.5 (chance) to 1.0. Accuracy is deliberately not shown:
-              the dataset is 68% positive, so every model scores ~0.70 by mostly answering "yes".
-            </div>
-
-            <div className="p-4 bg-amber-950/30 border border-amber-600/40 rounded-lg text-[11px] text-amber-200 leading-relaxed">
-              <b>Our quantum model does not win.</b> It reaches {metrics.vqc?.roc_auc?.toFixed(3)} against
-              {' '}{Math.max(...Object.values(metrics.classical_baselines_same_features || {}).map(m => m.roc_auc || 0)).toFixed(3)}
-              {' '}for the best classical baseline on identical features. We report the gap rather than hide it.
-              The limiting factor is the representation — four residue descriptors — not the classifier.
-            </div>
-
-            <div className="mt-4 text-[10px] text-slate-500 leading-relaxed">
-              <b className="text-slate-400">Circuit:</b> {metrics.vqc?.n_qubits} qubits ·
-              {' '}{metrics.vqc?.n_layers} layers · {metrics.vqc?.n_parameters} parameters ·
-              {' '}{metrics.vqc?.ansatz}
-              <br />
-              <b className="text-slate-400">Features:</b> {metrics.features}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showWelcome && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4 print-hidden">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative">
-            <button onClick={() => setShowWelcome(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
-              <X size={24} />
-            </button>
-            <div className="flex items-center gap-3 mb-6">
-              <Dna className="w-10 h-10 text-cyan-400" />
-              <h2 className="text-3xl font-bold text-white">Welcome to Q-VIRA</h2>
-            </div>
-            <p className="text-slate-300 mb-6 leading-relaxed">
-              <b className="text-white">The problem:</b> labs deposit new coronavirus sequences every day, and
-              someone has to decide which mutations are worth testing in a lab first. Testing is slow and expensive.
-              <br /><br />
-              <b className="text-white">What Q-VIRA does:</b> it scores each mutation with a 4-qubit quantum
-              classifier trained on real laboratory measurements of 4,221 mutations, and ranks them so the most
-              promising get looked at first. Think triage list, not verdict.
-              <br /><br />
-              <span className="text-amber-300">It is a research prototype, not a clinical or public-health tool,
-              and we do not claim a quantum advantage — our results page shows the classical baselines beating
-              it.</span>
+            <p className="small" style={{ marginTop: '0.4rem' }}>
+              Held-out ROC-AUC on {metrics.n_test} rows the model never saw. Every model below was
+              trained on identical features and an identical split.
             </p>
-            <div className="space-y-4 mb-8">
-              <div className="flex gap-4 items-start p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                <div className="bg-rose-500/20 text-rose-400 rounded-full w-8 h-8 flex items-center justify-center font-bold shrink-0">1</div>
-                <div>
-                  <h3 className="font-bold text-white">Real sequences, real mutations</h3>
-                  <p className="text-sm text-slate-400">Recently deposited SARS-CoV-2 spike proteins are pulled from NCBI and aligned against the 2019 Wuhan reference to find exactly which residues changed.</p>
-                </div>
-              </div>
-              <div className="flex gap-4 items-start p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                <div className="bg-cyan-500/20 text-cyan-400 rounded-full w-8 h-8 flex items-center justify-center font-bold shrink-0">2</div>
-                <div>
-                  <h3 className="font-bold text-white">4-qubit quantum classifier</h3>
-                  <p className="text-sm text-slate-400">Each mutation becomes 4 numbers, encoded as rotation angles. A data re-uploading circuit scores it. Trained on Starr et al. (2020) deep mutational scanning, tested on held-out positions.</p>
-                </div>
-              </div>
-            </div>
-            <button 
-              onClick={() => setShowWelcome(false)}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-            >
-              Enter Dashboard <ArrowRight size={20} />
-            </button>
-          </div>
-        </div>
-      )}
 
-      <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 print-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-y-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20">
-              <Dna className="w-8 h-8 text-cyan-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 tracking-tight">
-                Q-VIRA
-              </h1>
-              <div className="text-[11px] text-slate-400 font-medium uppercase tracking-wider">BioQubit Labs</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            {metrics?.vqc?.roc_auc && (
-              <button onClick={() => setShowMetrics(true)}
-                className="hidden lg:flex flex-col items-end mr-1 px-3 py-1 rounded-lg hover:bg-slate-800/60 transition print-hidden"
-                title="Held-out AUC, measured on 946 unseen rows. Click for the full model card.">
-                <span className="text-[9px] text-slate-500 uppercase tracking-wider leading-none">held-out AUC</span>
-                <span className="text-cyan-300 font-mono font-bold text-sm leading-tight">
-                  {metrics.vqc.roc_auc.toFixed(4)}
-                </span>
-              </button>
-            )}
-            <button onClick={() => setShowMetrics(true)}
-              className="flex items-center gap-2 text-slate-400 hover:text-white text-sm font-medium transition print-hidden">
-              <Activity size={16}/> Results
-            </button>
-            <button onClick={() => setShowWelcome(true)} className="text-slate-400 hover:text-cyan-400 flex items-center gap-1 text-sm font-medium transition-colors">
-              <HelpCircle size={18} /> Tour
-            </button>
-            <div className="h-6 w-px bg-slate-700"></div>
-            <div className="flex items-center gap-3">
-              
-              <button 
-                onClick={runLiveQuantumEngine}
-                disabled={loading || isFolding}
-                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2 transition-all shadow-[0_0_15px_-5px_rgba(6,182,212,0.5)] disabled:opacity-50"
-              >
-                {loading || isFolding ? <Activity className="animate-spin" size={20} /> : <Play size={20} />}
-                {loading || isFolding ? "Processing Pipeline..." : "Run VQC Engine"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-
-        {waking && (
-          <div className="mb-6 p-4 bg-slate-900 border border-cyan-700/50 rounded-xl flex items-start gap-3">
-            <Cpu className="text-cyan-400 shrink-0 mt-0.5 animate-pulse" size={20} />
-            <div>
-              <div className="font-bold text-cyan-300">
-                Waking the analysis backend… {wakeSeconds}s
-              </div>
-              <div className="text-sm text-slate-400 mt-1">
-                The API runs on a free instance that sleeps when idle, so the first request
-                after a quiet period takes about 50 seconds. Everything loads automatically —
-                no need to refresh.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {apiError && (
-          <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border ${
-            apiErrorKind === 'input'
-              ? 'bg-amber-950/40 border-amber-500/50'
-              : 'bg-rose-950/40 border-rose-500/50'}`}>
-            <AlertTriangle className={`shrink-0 mt-0.5 ${
-              apiErrorKind === 'input' ? 'text-amber-400' : 'text-rose-400'}`} size={20} />
-            <div>
-              <div className={`font-bold ${apiErrorKind === 'input' ? 'text-amber-300' : 'text-rose-300'}`}>
-                {apiErrorKind === 'input'
-                  ? 'Input rejected — the backend answered, nothing is wrong with the connection'
-                  : 'Backend unavailable — no results shown'}
-              </div>
-              <div className="text-sm text-slate-300 mt-1">{apiError}</div>
-              <div className="text-xs text-slate-500 mt-2">
-                {apiErrorKind === 'input'
-                  ? 'Mutations are checked against the reference before scoring, so a mistyped wild-type residue is caught instead of silently scoring the wrong position.'
-                  : 'Q-VIRA does not display simulated numbers when the model is unreachable.'}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {health && health.model_trained === false && (
-          <div className="mb-6 p-4 bg-amber-950/40 border border-amber-500/50 rounded-xl text-sm text-amber-200">
-            <b>Model not trained.</b> weights.npz is missing on the backend, so /predict will
-            refuse to return a score. Run <code>python train_vqc.py --data &lt;csv&gt;</code> and redeploy.
-          </div>
-        )}
-
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-lg relative overflow-hidden">
-            <div className="text-slate-400 mb-1 font-medium flex items-center">
-              Quantum Threat Score 
-            </div>
-            <div className="text-[11px] text-slate-500 mb-3 uppercase tracking-wider">
-              PennyLane VQC · 4 qubits · expectation value
-            </div>
-            <div className="text-5xl font-bold text-white">
-              {result ? threatScore.toFixed(2) : '--'}
-              {result && (
-                <span className="text-lg text-slate-400 ml-2">
-                  ± {result.threat_score_stderr.toFixed(3)}
-                </span>
-              )}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-2">
-              {result ? `${result.quantum.shots} shots · driver: ${result.driver_mutation}` : 'Run the engine to compute'}
-            </div>
-            {result?.distribution && !result.distribution.in_distribution && (
-              <div className="mt-3 p-2 bg-amber-950/40 border border-amber-500/40 rounded text-[10px] text-amber-200">
-                ⚠ {result.distribution.note}
-              </div>
-            )}
-            {result?.mutations?.length > 1 && (
-              <div className="mt-3 pt-3 border-t border-slate-800 space-y-1">
-                {result.mutations.map(m => (
-                  <div key={m.mutation} className="flex justify-between text-[11px]">
-                    <span className="font-mono text-slate-400">
-                      {m.in_trained_domain === false && <span className="text-amber-400">⚠ </span>}
-                      {m.mutation}
-                    </span>
-                    <span className="text-slate-300">{m.score.toFixed(3)}</span>
+            <div className="lanes" style={{ marginTop: '1.25rem' }}>
+              {Object.entries({
+                'VQC (ours, 4 qubits)': metrics.vqc?.roc_auc,
+                ...Object.fromEntries(Object.entries(metrics.classical_baselines_same_features || {})
+                  .map(([k, v]) => [BASELINE_NAME[k] || k.replace(/_/g, ' '), v.roc_auc]))
+              })
+                .filter(([, v]) => typeof v === 'number')
+                .sort((a, b) => b[1] - a[1])
+                .map(([name, auc]) => (
+                  <div key={name} className="lane" style={{ gridTemplateColumns: '1fr 6rem', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 'var(--t-sm)', marginBottom: '0.35rem' }}>{name}</div>
+                      <Bar value={(auc - 0.5) / 0.5} />
+                    </div>
+                    <div className="mono" style={{ textAlign: 'right', color: C.assay }}>{auc.toFixed(4)}</div>
                   </div>
                 ))}
-                <div className="text-[9px] text-slate-600 pt-1">
-                  Scored independently — epistasis is not modelled.
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-lg relative overflow-hidden">
-            <div className="text-slate-400 mb-1 font-medium flex items-center">
-              Projected R0 Velocity 
             </div>
-            <div className="text-[11px] text-slate-500 mb-3 uppercase tracking-wider">
-              Scenario parameter (not a forecast)
-            </div>
-            <div className="text-5xl font-bold text-white">
-              {seir ? r0.toFixed(2) : '--'}
-              <span className="text-lg text-orange-400 ml-2">R₀</span>
-            </div>
-            <div className="text-[10px] text-slate-500 mt-2">
-              {seir ? `Peak day ${seir.indicators.peak_day} · attack rate ${seir.indicators.attack_rate_percent}%` : 'Mapped from score over 0.8–4.0'}
-            </div>
-          </div>
-          
-          <div className="p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-lg relative overflow-hidden">
-            <div className="text-slate-400 mb-1 font-medium flex items-center">
-              Validated Domain
-            </div>
-            <div className="text-[11px] text-slate-500 mb-3 uppercase tracking-wider">
-              Where this model is trained to work
-            </div>
-            <div className="text-xl font-bold text-white leading-tight">
-              {result?.trained_domain ? `Spike ${result.trained_domain.spike_sites}` : 'SARS-CoV-2 RBD'}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-2 leading-relaxed">
-              {result?.trained_domain
-                ? `${result.trained_domain.length}-residue receptor-binding domain · ACE2 binding`
-                : '201-residue receptor-binding domain · ACE2 binding'}
-            </div>
-            {result?.distribution && (
-              <div className={`mt-3 text-[11px] font-medium ${result.distribution.in_distribution ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {result.distribution.in_distribution ? '✓ In-distribution' : '⚠ Out of distribution'}
-              </div>
-            )}
+
+            <p className="note" style={{ marginTop: '1.25rem' }}>
+              <b>Read AUC, not accuracy.</b> The dataset is 68% positive, so every model scores
+              roughly 0.69–0.73 accuracy by mostly answering yes. Our quantum model places fourth of
+              five. We report the gap rather than hide it.
+            </p>
+
+            <dl className="facts" style={{ marginTop: '1rem' }}>
+              <div><dt>Circuit</dt><dd>{metrics.vqc?.n_qubits} qubits · {metrics.vqc?.n_layers} layers · {metrics.vqc?.n_parameters} parameters</dd></div>
+              <div><dt>Ansatz</dt><dd>{metrics.vqc?.ansatz}</dd></div>
+            </dl>
+            <p className="small" style={{ marginTop: '0.75rem' }}>
+              Split: {metrics.split}<br />Features: {metrics.features}
+            </p>
           </div>
         </div>
+      )}
 
-        <div className="flex gap-2 bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-800 w-full lg:w-fit overflow-x-auto print-hidden">
-          {[
-            { id: 'sentinel', label: '1. Surveillance Feed' },
-            { id: 'genomics', label: '2. Score a Variant' },
-            { id: 'vqc', label: '3. Quantum Circuit (VQC)' },
-            { id: 'seir', label: '4. Epidemic Scenario' },
-            { id: 'vqe', label: '5. Quantum Chemistry (VQE)' }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${
-                activeTab === tab.id 
-                  ? 'bg-slate-800 text-cyan-400 shadow-md border border-slate-700' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      {/* ----------------------------------------------------------- welcome */}
+      {showWelcome && (
+        <div className="overlay print-hidden">
+          <div className="dialog">
+            <div className="small">BioQubit Labs · Q-Hack India 2026</div>
+            <h2 style={{ fontSize: 'var(--t-xl)', letterSpacing: '-0.03em', margin: '0.4rem 0 1rem' }}>
+              Which mutation should a lab test first?
+            </h2>
+            <p>
+              Labs deposit new coronavirus sequences every day, and someone has to decide which
+              mutations are worth bench time. Characterising one takes two to six weeks.
+            </p>
+            <p>
+              Q-VIRA scores each substitution with a 4-qubit quantum classifier trained on laboratory
+              measurements of 4,221 real mutations, and ranks them so the most promising are looked
+              at first. It produces a triage order, not a verdict.
+            </p>
+            <p className="note is-flag" style={{ margin: '1.25rem 0' }}>
+              <b>What this is not.</b> A research prototype, not a clinical or public-health tool. We
+              claim no quantum advantage — the model card shows three classical baselines beating our
+              circuit on identical features.
+            </p>
+            <button className="btn" onClick={() => setShowWelcome(false)}>Open the dashboard</button>
+          </div>
         </div>
+      )}
 
-        <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-xl min-h-[500px]">
+      {/* ---------------------------------------------------------- masthead */}
+      <header className="masthead print-hidden">
+        <div className="shell masthead-in">
+          <div className="wordmark">Q<span>·</span>VIRA</div>
+          <div className="masthead-sub">BioQubit Labs</div>
+          <div className="masthead-right">
+            {metrics?.vqc?.roc_auc && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowMetrics(true)}>
+                Held-out AUC {metrics.vqc.roc_auc.toFixed(3)} · model card
+              </button>
+            )}
+            <span className="small mono">
+              {waking ? `waking backend · ${wakeSeconds}s`
+                : health ? `backend online${health.model_trained ? ' · model loaded' : ' · untrained'}`
+                : 'backend unreachable'}
+            </span>
+          </div>
+        </div>
+      </header>
 
-          {/* TAB 1 */}
-          {activeTab === 'sentinel' && (
-            <div className="animate-fadeIn">
-              <h2 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
-                <Radio size={20} className="text-cyan-400" /> Surveillance Feed
-              </h2>
+      <main>
+        {/* ------------------------------------------------------------ hero */}
+        <section className="shell hero">
+          <h1 className="hero-q">Which mutation should a lab test first?</h1>
+          <p className="hero-sub">
+            Q-VIRA scores one amino-acid substitution for whether the virus still binds human ACE2,
+            and puts the results in order so limited bench capacity goes to the right change first.
+          </p>
 
-              <div className="mb-5 p-4 bg-slate-950 border border-slate-800 rounded-xl max-w-3xl">
-                <div className="text-sm text-slate-200 font-medium mb-2">What this page does</div>
-                <div className="text-[12px] text-slate-400 leading-relaxed space-y-2">
-                  <p>
-                    Laboratories upload newly sequenced coronaviruses to a public database every day.
-                    Most carry mutations that change nothing. A few change the part of the virus that
-                    grabs onto human cells — and those are the ones worth testing in a lab first.
-                    Lab testing is slow and expensive, so somebody has to decide what to test.
+          <div className="readout">
+            <div className="readout-top">
+              {result ? (
+                <>
+                  <div>
+                    <div className="readout-label">Binding score · {result.driver_mutation}</div>
+                    <div className="readout-value">
+                      {result.threat_score.toFixed(3)}
+                      <span className="readout-err">± {result.threat_score_stderr.toFixed(3)}</span>
+                    </div>
+                  </div>
+                  <div className="readout-meta">
+                    {result.quantum.shots} shots · R₀ scenario {r0.toFixed(2)}
+                    {seir && <> · peak day {seir.indicators.peak_day}</>}
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <div className="readout-label">Nothing scored yet</div>
+                  <p style={{ maxWidth: '54ch', marginTop: '0.15rem' }}>
+                    The ruler below is the window this model was trained on — 201 residues of the
+                    receptor-binding domain. Score a substitution and it appears at its real
+                    position, or read the ranked feed of today's deposits.
                   </p>
-                  <p>
-                    This page does that sorting. It downloads the newest sequences, compares each one
-                    against the original 2019 Wuhan virus to see exactly which letters of the protein
-                    changed, and gives every change a score from our quantum model. Higher means the
-                    mutated virus more likely still binds to human cells.
-                  </p>
-                  <p>
-                    Nearly every virus circulating today already carries the same ~30 changes
-                    inherited from Omicron, so those tell you nothing about which sample is new.
-                    We rank instead by the changes <b>unique to each deposit</b> — highlighted in
-                    blue below, with the shared ones greyed out.
-                  </p>
-                  <p className="text-slate-500">
-                    <b className="text-slate-400">Read it as a to-do list, not a verdict.</b> A high
-                    score means "a lab should look at this sooner", not "this is dangerous" and not
-                    "this will spread".
-                  </p>
-                </div>
-              </div>
-
-              <div className="text-[11px] text-slate-500 leading-relaxed mb-4 max-w-3xl">
-                <b className="text-slate-400">Technical:</b> recently deposited SARS-CoV-2 spike
-                proteins from NCBI, aligned to the Wuhan-Hu-1 reference by local alignment
-                (Smith-Waterman, BLOSUM62). Substitutions inside the receptor-binding domain
-                (spike sites 331–531) are scored by the trained VQC and ranked. Full pipeline:
-                sequence → alignment → substitutions → quantum score → triage order.
-              </div>
-
-              {sentinelError && (
-                <div className="p-4 bg-amber-950/40 border border-amber-500/50 rounded-xl text-sm text-amber-200">
-                  <b>No cached feed.</b> {sentinelError}
                 </div>
               )}
+            </div>
+
+            <DomainRuler mutations={result?.mutations ?? []} />
+
+            {result && (
+              <div style={{ marginTop: '0.35rem' }}>
+                <Bar value={result.threat_score} flagged={outOfDomain} />
+              </div>
+            )}
+
+            {outOfDomain && (
+              <p className="note is-flag" style={{ marginTop: '0.9rem' }}>
+                <b>Outside the trained domain.</b> {result.distribution.note}
+              </p>
+            )}
+
+            {result?.mutations?.length > 1 && (
+              <div className="chips" style={{ marginTop: '0.9rem', alignItems: 'center' }}>
+                {result.mutations.map(m => (
+                  <span key={m.mutation}
+                        className={`chip${m.in_trained_domain === false ? ' no-structure' : ' is-unique'}`}>
+                    {m.mutation}<span className="s">{m.score.toFixed(3)}</span>
+                  </span>
+                ))}
+                <span className="small">scored independently — epistasis is not modelled</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------------ tabs */}
+        <div className="shell print-hidden" style={{ marginTop: '2.25rem' }}>
+          <div className="rail" role="tablist">
+            {TABS.map(t => (
+              <button key={t.id} role="tab" aria-selected={activeTab === t.id}
+                      onClick={() => setActiveTab(t.id)}>{t.label}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="shell">
+
+          {/* ============================================= 1. SURVEILLANCE */}
+          {activeTab === 'sentinel' && (
+            <section className="panel">
+              <div className="panel-head">
+                <h2>Surveillance feed</h2>
+                <p className="lede">
+                  Recently deposited SARS-CoV-2 spike proteins from NCBI, aligned to the Wuhan-Hu-1
+                  reference by local alignment (Smith–Waterman, BLOSUM62). Substitutions inside the
+                  receptor-binding domain, spike sites 331–531, are scored by the trained circuit and
+                  ranked.
+                </p>
+              </div>
+
+              <p className="note" style={{ marginBottom: '1.5rem' }}>
+                Nearly every circulating virus already carries the same ~30 changes inherited from
+                Omicron, so those say nothing about which sample is new. Lanes are ranked by the
+                substitutions <b>unique to each deposit</b>, shown in colour below; shared ones stay
+                grey. <b>Read it as a worklist, not a verdict</b> — a high score means a lab should
+                look sooner, not that a variant is dangerous or will spread.
+              </p>
+
+              {sentinelError && <p className="note is-alarm"><b>No feed.</b> {sentinelError}</p>}
 
               {sentinel && (
                 <>
-                  <div className="flex flex-wrap gap-3 mb-4">
-                    {[
-                      { label: 'Fetched', value: new Date(sentinel.fetched_at).toLocaleString() },
-                      { label: 'Sequences downloaded', value: sentinel.n_analysed },
-                      { label: 'Genuinely different ones', value: sentinel.n_distinct_variants },
-                      { label: 'Unusable', value: sentinel.n_skipped },
-                      { label: 'Region examined', value: `spike ${sentinel.rbd_window}` },
-                      { label: 'Shared by all', value: `${sentinel.n_shared_mutations} mutations` },
-                    ].map(x => (
-                      <div key={x.label} className="bg-slate-950 border border-slate-800 rounded-lg px-4 py-2">
-                        <div className="text-[9px] text-slate-500 uppercase tracking-wider">{x.label}</div>
-                        <div className="text-sm text-slate-200 font-mono">{x.value}</div>
-                      </div>
-                    ))}
+                  <dl className="facts">
+                    <div>
+                      <dt>Fetched</dt>
+                      <dd>
+                        {new Date(sentinel.fetched_at).toLocaleString()}
+                        {feedStatus?.age_hours != null && (
+                          <span className="small"> · {feedStatus.age_hours.toFixed(1)}h ago</span>
+                        )}
+                      </dd>
+                    </div>
+                    <div><dt>Sequences analysed</dt><dd>{sentinel.n_analysed}</dd></div>
+                    <div><dt>Genuinely distinct</dt><dd>{sentinel.n_distinct_variants}</dd></div>
+                    <div><dt>Unusable</dt><dd>{sentinel.n_skipped}</dd></div>
+                    <div><dt>Region examined</dt><dd>spike {sentinel.rbd_window}</dd></div>
+                    <div><dt>Shared by all</dt><dd>{sentinel.n_shared_mutations} mutations</dd></div>
+                  </dl>
+
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap',
+                                margin: '1rem 0 1.75rem' }}>
+                    <button className="btn btn-ghost btn-sm" onClick={refreshSentinel}
+                            disabled={sentinelBusy || feedStatus?.refreshing}>
+                      {sentinelBusy || feedStatus?.refreshing ? 'Querying NCBI…' : 'Fetch the latest deposits'}
+                    </button>
+                    <span className="small" style={{ maxWidth: '62ch' }}>
+                      {feedStatus?.auto_refresh
+                        ? `The feed refreshes itself once it passes ${feedStatus.max_age_hours}h old. NCBI rate-limits queries, so a fetch runs in the background and the page is served from memory — the timestamp is the real fetch time, never a page-load time.`
+                        : 'NCBI rate-limits queries, so deposits are fetched ahead of time. The timestamp is the real fetch time.'}
+                    </span>
                   </div>
 
-                  <div className="mb-4 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-[10px] text-slate-500">
-                    <b className="text-slate-400">These results were downloaded earlier, not just now.</b>{' '}
-                    The public database limits how often it can be queried, so we fetch in advance and
-                    show you when. The timestamp above is the real fetch time.
-                  </div>
+                  {feedStatus?.last_error && (
+                    <p className="note is-flag" style={{ marginBottom: '1rem' }}>
+                      <b>The last refresh failed.</b> {feedStatus.last_error} — showing the previous feed.
+                    </p>
+                  )}
 
-                  <div className="space-y-2">
+                  <p className="note is-flag" style={{ marginBottom: '1.25rem' }}>
+                    <b>Why some lanes are flagged.</b> The model was trained on <i>single</i> mutants
+                    of Wuhan-Hu-1. A deposit carrying tens of co-occurring RBD substitutions is scored
+                    one substitution at a time, which ignores epistasis — and epistasis is large in
+                    this domain. Those lanes are marked below and their scores are weaker evidence.
+                  </p>
+
+                  <div className="lanes">
                     {sentinel.records.filter(r => r.max_score !== null).map(r => (
-                      <div key={r.accession} className="bg-slate-950 border border-slate-800 rounded-xl p-4 hover:border-slate-700 transition">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <div className="font-mono text-cyan-300 text-sm">{r.accession}</div>
-                            <div className="text-[10px] text-slate-500 truncate max-w-xl">{r.description}</div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-2xl font-bold text-white leading-none">
-                              {r.top_distinguishing_score !== null ? r.top_distinguishing_score.toFixed(3) : '—'}
-                            </div>
-                            <div className="text-[9px] text-slate-500 uppercase tracking-wider mt-1">
-                              {r.top_distinguishing ? `top unique change · ${r.top_distinguishing}` : 'nothing unique'}
-                            </div>
-                            {r.identical_count > 1 && (
-                              <div className="text-[9px] text-cyan-400 mt-1">×{r.identical_count} identical deposits</div>
+                      <article key={r.accession} className="lane">
+                        <div>
+                          <div className="lane-acc">{r.accession}</div>
+                          {r.identical_count > 1 && (
+                            <div className="small">×{r.identical_count} identical deposits</div>
+                          )}
+                        </div>
+
+                        <div className="stack-sm">
+                          <div className="lane-desc" title={r.description}>{r.description}</div>
+                          <div className="chips">
+                            {[...r.distinguishing_mutations,
+                              ...r.mutations.filter(m => !r.distinguishing_mutations.some(x => x.mutation === m.mutation))
+                             ].slice(0, 12).map(m => {
+                              const unique = r.distinguishing_mutations.some(x => x.mutation === m.mutation);
+                              return (
+                                <span key={m.mutation}
+                                      title={m.has_structure === false
+                                        ? 'Outside the 6M0J crystal structure — the distance is a far-field fallback, not a measurement'
+                                        : undefined}
+                                      className={`chip${unique ? ' is-unique' : ''}${m.has_structure === false ? ' no-structure' : ''}`}>
+                                  {m.mutation}{m.has_structure === false && '*'}
+                                  <span className="s">{m.score.toFixed(2)}</span>
+                                </span>
+                              );
+                            })}
+                            {r.mutations.length > 12 && (
+                              <span className="small">+{r.mutations.length - 12} more</span>
                             )}
                           </div>
-                        </div>
-                        {r.high_divergence && (
-                          <div className="mt-3 p-2 bg-amber-950/40 border border-amber-500/40 rounded text-[10px] text-amber-200 leading-relaxed">
-                            <b>High divergence — weak evidence.</b> {r.rbd_substitutions} co-occurring RBD
-                            substitutions. The model was trained on <i>single</i> mutants of Wuhan-Hu-1, so
-                            scoring these independently ignores epistasis, which is large in the RBD. These
-                            scores are far weaker evidence than a single-substitution score.
+                          <div className="small">
+                            {r.n_distinguishing} unique to this deposit ·{' '}
+                            {r.n_without_structure > 0 && <>{r.n_without_structure} marked * sit outside the crystal structure and are excluded from ranking · </>}
+                            {r.rbd_substitutions} RBD substitution{r.rbd_substitutions === 1 ? '' : 's'} scored ·
+                            RBD coverage {(r.rbd_coverage * 100).toFixed(0)}% · {r.sequence_length} residues
                           </div>
-                        )}
-                        <div className="flex flex-wrap gap-1.5 mt-3">
-                          {[...r.distinguishing_mutations,
-                            ...r.mutations.filter(m => !r.distinguishing_mutations.some(d => d.mutation === m.mutation))
-                           ].slice(0, 12).map(m => {
-                            const unique = r.distinguishing_mutations.some(d => d.mutation === m.mutation);
-                            return (
-                              <span key={m.mutation}
-                                title={m.has_structure === false
-                                  ? 'Outside the 6M0J crystal structure — distance is a far-field fallback, not a measurement'
-                                  : undefined}
-                                className={`px-2 py-0.5 rounded font-mono text-[11px] border ${unique
-                                  ? 'bg-cyan-950/50 border-cyan-600/60 text-cyan-200'
-                                  : 'bg-slate-900 border-slate-800 text-slate-500'} ${
-                                  m.has_structure === false ? 'opacity-60 border-dashed' : ''}`}>
-                                {m.mutation}{m.has_structure === false && '*'}
-                                <span className="opacity-60 ml-1.5">{m.score.toFixed(2)}</span>
-                              </span>
-                            );
-                          })}
-                          {r.mutations.length > 12 && (
-                            <span className="px-2 py-0.5 text-[11px] text-slate-500">
-                              +{r.mutations.length - 12} more
-                            </span>
+                          {r.high_divergence && (
+                            <div className="small" style={{ color: 'var(--flag)' }}>
+                              High divergence — {r.rbd_substitutions} co-occurring RBD substitutions,
+                              so these scores are weaker evidence than a single-substitution score.
+                            </div>
                           )}
                         </div>
-                        <div className="text-[10px] text-slate-600 mt-2">
-                          <span className="text-cyan-500">{r.n_distinguishing} unique to this deposit</span> ·
-                          {r.n_without_structure > 0 && (
-                            <span className="text-slate-500"> {r.n_without_structure} marked * sit outside the
-                            crystal structure and are excluded from ranking ·</span>
-                          )}
-                          {' '}{r.rbd_substitutions} RBD substitution{r.rbd_substitutions === 1 ? '' : 's'} scored ·
-                          RBD coverage {(r.rbd_coverage * 100).toFixed(0)}% (local alignment) ·
-                          {' '}{r.sequence_length} residues
+
+                        <div className="lane-score">
+                          <div className="v">
+                            {r.top_distinguishing_score !== null ? r.top_distinguishing_score.toFixed(3) : '—'}
+                          </div>
+                          <div className="k">
+                            {r.top_distinguishing ? `top unique · ${r.top_distinguishing}` : 'nothing unique'}
+                          </div>
+                          <div style={{ marginTop: '0.45rem' }}>
+                            <Bar value={r.top_distinguishing_score ?? 0} flagged={r.high_divergence} />
+                          </div>
                         </div>
-                      </div>
+                      </article>
                     ))}
                   </div>
 
                   {sentinel.records.filter(r => r.max_score === null).length > 0 && (
-                    <div className="mt-4 text-[11px] text-slate-500">
+                    <p className="small" style={{ marginTop: '1rem' }}>
                       {sentinel.records.filter(r => r.max_score === null).length} further sequences had
                       no substitutions inside the RBD — a normal result, shown for completeness rather
                       than filtered away.
-                    </div>
+                    </p>
                   )}
 
-                  <details className="mt-5">
-                    <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-300">
-                      Caveats ({sentinel.caveats.length})
-                    </summary>
-                    <ul className="mt-2 space-y-1.5 text-[10px] text-slate-500 list-disc pl-5 max-w-3xl">
-                      {sentinel.caveats.map((c, i) => <li key={i}>{c}</li>)}
+                  <details style={{ marginTop: '1.25rem' }}>
+                    <summary>Caveats ({sentinel.caveats.length})</summary>
+                    <ul className="small" style={{ marginTop: '0.6rem', paddingLeft: '1.1rem', maxWidth: '72ch' }}>
+                      {sentinel.caveats.map((c, i) => <li key={i} style={{ marginBottom: '0.3rem' }}>{c}</li>)}
                     </ul>
                   </details>
                 </>
               )}
-            </div>
+            </section>
           )}
-          
-          {/* TAB 2: GENOMICS & 3D INGESTION */}
+
+          {/* =================================================== 2. SCORE */}
           {activeTab === 'genomics' && (
-            <div className="flex flex-col h-full gap-8">
-              <div className="flex flex-col md:flex-row gap-6">
-                <div className="flex-1">
-                  <h2 className="text-2xl font-bold text-white mb-1">Score a Variant</h2>
-                  <div className="text-[11px] text-slate-500 mb-4 uppercase tracking-wider">
-                    Pick a reference, then list substitutions (e.g. N501Y E484K)
+            <section className="panel">
+              <div className="panel-head">
+                <h2>Score a variant</h2>
+                <p className="lede">
+                  Pick a reference, then list substitutions in standard notation — wild-type residue,
+                  position, mutant residue, as in N501Y. The wild-type letter is checked against the
+                  reference, so a wrong one is rejected rather than scored at the wrong position.
+                </p>
+              </div>
+
+              <div className="cols cols-2">
+                <div className="stack">
+                  <div>
+                    <label className="field" htmlFor="ref">Reference sequence</label>
+                    <select id="ref" value={refName} onChange={e => setRefName(e.target.value)}>
+                      {refList.length === 0 && <option value="">No references loaded</option>}
+                      {refList.filter(r => r.in_distribution).map(r => (
+                        <option key={r.name} value={r.name}>{r.name} ({r.length} aa)</option>
+                      ))}
+                    </select>
                   </div>
 
-                  <label className="block text-xs text-slate-400 mb-1">Reference sequence</label>
-                  <select
-                    value={refName}
-                    onChange={e => setRefName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm text-slate-200 mb-4"
-                  >
-                    {refList.length === 0 && <option value="">No references — run build_panel.py</option>}
-                    {refList.filter(r => r.in_distribution).map(r => (
-                      <option key={r.name} value={r.name}>{r.name} ({r.length} aa)</option>
-                    ))}
-                  </select>
+                  <div>
+                    <label className="field" htmlFor="muts">Substitutions</label>
+                    <input id="muts" type="text" className="mono" value={mutationInput}
+                           onChange={e => setMutationInput(e.target.value)} placeholder="N501Y E484K" />
+                    <p className="small" style={{ marginTop: '0.4rem' }}>
+                      Space or comma separated. The model is trained on the receptor-binding domain
+                      only — spike sites 331–531. Positions outside that window are flagged, not hidden.
+                    </p>
+                  </div>
 
-                  {refName && refList.find(r => r.name === refName && !r.in_distribution) && (
-                    <div className="mb-4 p-3 bg-amber-950/40 border border-amber-500/50 rounded-lg">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-                        <div className="text-[11px] text-amber-200 leading-relaxed">
-                          <b>Out of distribution.</b> This model was trained only on SARS-CoV-2
-                          RBD binding to human ACE2. Other viruses use different receptors, so a
-                          score here is computed but <b>not validated</b>. Shown deliberately —
-                          the model cannot tell it is out of its domain, so the interface says so.
-                        </div>
-                      </div>
-                    </div>
+                  <button className="btn" onClick={runLiveQuantumEngine} disabled={loading || !refName}>
+                    {loading ? 'Scoring…' : 'Score these substitutions'}
+                  </button>
+
+                  {apiError && (
+                    <p className={`note ${apiErrorKind === 'input' ? 'is-flag' : 'is-alarm'}`}>
+                      <b>{apiErrorKind === 'input' ? 'Rejected.' : 'Backend unreachable.'}</b> {apiError}
+                    </p>
                   )}
 
                   {refList.some(r => !r.in_distribution) && (
-                    <div className="text-[10px] text-slate-600 mb-4 leading-relaxed">
+                    <p className="note">
                       {refList.filter(r => !r.in_distribution).length} other reference proteins are
-                      loaded (MERS, Ebola, Nipah, influenza and others) but are <b>not selectable for
-                      scoring</b>: the model is trained only on SARS-CoV-2 RBD / ACE2 binding, and
-                      those viruses use different receptors. Offering them would imply a validity we
-                      have not measured.
-                    </div>
+                      loaded — MERS, Ebola, Nipah, influenza and others — but are <b>not selectable</b>.
+                      The model is trained only on SARS-CoV-2 RBD binding to human ACE2, and those
+                      viruses use different receptors. Offering them would imply a validity we have
+                      not measured.
+                    </p>
                   )}
 
-                  <label className="block text-xs text-slate-400 mb-1">Substitutions</label>
-                  <input
-                    value={mutationInput}
-                    onChange={e => setMutationInput(e.target.value)}
-                    placeholder="N501Y E484K"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm font-mono text-cyan-300 mb-2"
-                  />
-                  <div className="text-[10px] text-slate-600 mb-4">
-                    Standard notation: wild-type residue, position, mutant residue (e.g. N501Y).
-                    The wild-type letter is checked against the reference, so a wrong one is
-                    rejected rather than scored at the wrong position.
-                    Space or comma separated. The model is trained on the receptor-binding domain
-                    only — <b>spike sites 331–531</b>. Positions outside that window are flagged.
-                  </div>
-                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-500 leading-relaxed">
-                    <b className="text-slate-400">Why there is no sequence box.</b> The trained model
-                    scores <i>substitutions</i>, not whole sequences: it takes a reference protein and
-                    the residue changes applied to it. Pasting a raw FASTA would not tell it which
-                    positions changed. The reference sequences are fetched from NCBI by the backend.
-                  </div>
-
-                </div>
-                <div className="w-full md:w-64 flex flex-col justify-end gap-3">
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider text-center">Structure ID (Auto-populates)</div>
-                  <input 
-                    type="text" 
-                    readOnly
-                    className={`w-full bg-slate-950 border rounded-xl p-3 font-mono text-sm outline-none text-center transition-colors border-slate-700 text-emerald-400`}
-                    value={pdbInput}
-                    placeholder="e.g. 6M0J"
-                  />
-
-                  <div className="text-[10px] text-slate-500 leading-relaxed">
-                    Enter any RCSB PDB ID to view it. <b className="text-slate-400">6M0J</b> is the
-                    experimentally-solved SARS-CoV-2 RBD bound to human ACE2 — the exact interaction
-                    this model scores. These are solved structures, not predictions.
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-72 min-w-0">
-                <div className="flex flex-col items-center justify-center border border-slate-800 rounded-xl bg-slate-950/50 p-4 min-w-0">
-                  <div className="w-full text-center text-sm font-bold text-slate-300">Model inputs (4 qubits)</div>
-                  <div style={{ width: '100%', height: '100%', minHeight: 0 }}>
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={featureData}>
-                      <PolarGrid stroke="#334155" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 150]} tick={false} axisLine={false} />
-                      <Radar name="Threat Vector" dataKey="A" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.3} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-</div>
+                  <p className="note">
+                    <b>Why there is no sequence box.</b> The model scores <i>substitutions</i>, not
+                    whole sequences: it takes a reference protein and the residue changes applied to
+                    it. Pasting a raw FASTA would not tell it which positions changed. The reference
+                    sequences are fetched from NCBI by the backend.
+                  </p>
                 </div>
 
-                <div className="relative border border-slate-800 rounded-xl bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
-                  {isFolding ? (
-                    <div className="flex flex-col items-center justify-center h-full w-full bg-slate-900 border border-rose-500/50">
-                      <Cpu size={48} className="text-rose-400 mb-4 animate-pulse" />
-                      <div className="text-slate-300 font-mono font-bold text-lg">Loading reference structure</div>
-                      <div className="text-slate-400 text-xs mt-2 text-center px-4">Fetching an experimentally-solved PDB entry. No structure prediction is performed.</div>
+                <div className="stack" style={{ minWidth: 0 }}>
+                  <div className="figure">
+                    <div style={{ fontSize: 'var(--t-sm)', fontWeight: 600, marginBottom: '0.5rem' }}>
+                      The four descriptors this circuit reads
                     </div>
-                  ) : (
-                    <>
-                      <iframe
-                        key={pdbInput}
-                        src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`}
-                        title="3D Protein Structure"
-                        className="absolute z-0 border-0"
-                        style={{
-                          // Render the frame LARGER and crop it, rather than
-                          // transform: scale(), which stretches the finished
-                          // bitmap and looks blurry. iCn3D fits the molecule to
-                          // its canvas, so a bigger canvas draws the structure
-                          // at more pixels; the parent's overflow-hidden trims
-                          // the empty margin around it.
-                          width: '165%', height: '165%',
-                          left: '-32.5%', top: '-32.5%',
-                        }}
-                      ></iframe>
+                    <div style={{ width: '100%', height: 230, minWidth: 0 }}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                        <RadarChart cx="50%" cy="50%" outerRadius="72%" data={featureData}>
+                          <PolarGrid stroke={C.rule} />
+                          <PolarAngleAxis dataKey="subject" tick={{ fill: C.ink2, fontSize: 11 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 120]} tick={false} axisLine={false} />
+                          <Radar dataKey="A" stroke={C.assay} fill={C.assay} fillOpacity={0.22} />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="figure-cap">
+                      One descriptor per qubit, normalised to the clamp ranges in the featuriser.
+                      Chosen by ablation: eight descriptors scored worse than these four.
+                    </div>
+                  </div>
 
-                      <button
-                        onClick={() => setStructureFullscreen(true)}
-                        className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-600 hover:border-cyan-500 text-slate-300 hover:text-cyan-300 font-mono text-[10px] px-3 py-1.5 rounded backdrop-blur-sm transition">
-                        <Maximize2 size={11} /> EXPAND
-                      </button>
-                    </>
-                  )}
-                  
-                  <div className="z-10 absolute bottom-3 left-3 bg-slate-900/90 p-2 rounded-lg border border-slate-700 backdrop-blur-md pointer-events-none">
-                    <div className="flex items-center gap-2 text-[10px] tracking-widest font-bold">
-                      <div className="w-2 h-2 rounded-full animate-pulse bg-emerald-400"></div>
-                      <span className="text-slate-300">
-                        STRUCTURE: {pdbInput ? pdbInput.toUpperCase() : 'NONE'}
-                      </span>
+                  <div className="figure" style={{ padding: 0, overflow: 'hidden' }}>
+                    {isFolding ? (
+                      <div style={{ height: 280, display: 'grid', placeItems: 'center', textAlign: 'center', padding: '1rem' }}>
+                        <div>
+                          <div className="mono" style={{ fontSize: 'var(--t-sm)' }}>Loading reference structure</div>
+                          <div className="small" style={{ marginTop: '0.3rem' }}>
+                            Fetching a solved PDB entry. No structure prediction is performed.
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ position: 'relative', height: 280, overflow: 'hidden' }}>
+                        <iframe
+                          key={pdbInput}
+                          src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`}
+                          title="Protein structure"
+                          style={{
+                            /* Render the frame LARGER and crop it rather than
+                               transform: scale(), which stretches the finished
+                               bitmap. iCn3D fits the molecule to its canvas, so
+                               a bigger canvas draws it at more pixels. */
+                            position: 'absolute', border: 0,
+                            width: '165%', height: '165%', left: '-32.5%', top: '-32.5%',
+                          }}
+                        />
+                        <button className="btn btn-ghost btn-sm"
+                                style={{ position: 'absolute', top: 8, right: 8, background: C.paper }}
+                                onClick={() => setStructureFullscreen(true)}>Expand</button>
+                      </div>
+                    )}
+                    <div className="figure-cap" style={{ padding: '0.75rem 1rem', marginTop: 0 }}>
+                      <span className="mono">{(pdbInput || '6m0j').toUpperCase()}</span> — the solved
+                      SARS-CoV-2 RBD bound to human ACE2, the exact interaction this model scores. The
+                      interface distances the circuit reads were measured from this complex. Solved
+                      structures, not predictions.
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </section>
           )}
 
-          {/* TAB 3: VQC PROBABILITY DISTRIBUTION */}
+          {/* ================================================= 3. CIRCUIT */}
           {activeTab === 'vqc' && (
-            <div className="h-full flex flex-col">
-              <div className="flex justify-between items-end mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-1 flex items-center">
-                    Quantum Probability Amplitudes
-                  </h2>
-                  <div className="text-[11px] text-slate-500 leading-tight">
-                    <span className="text-slate-400 font-bold">VQC:</span> |ψ|² over the 16 basis states, returned by the backend circuit that computes the score.
-                  </div>
-                </div>
-                <div className="bg-slate-950 px-4 py-2 rounded-lg border border-slate-700 text-xs font-mono text-cyan-400 shadow-inner">
-                  System: 4-Qubits | 2^4 Hilbert Space
-                </div>
+            <section className="panel">
+              <div className="panel-head">
+                <h2>The circuit</h2>
+                <p className="lede">
+                  |ψ|² across the 16 basis states of the 4-qubit register, returned by the same
+                  circuit that produces the score. Data re-uploading ansatz; the score is the
+                  expectation value of Pauli-Z on the first qubit.
+                </p>
               </div>
-              
-              <div className="flex-1 bg-slate-950 rounded-xl p-6 border border-slate-800">
+
+              <div className="figure">
                 {quantumWaveformData.length === 0 ? (
-                  <div className="h-[350px] flex items-center justify-center text-slate-500 text-sm">
-                    Run the VQC engine to compute the state distribution.
+                  <div style={{ height: 320, display: 'grid', placeItems: 'center' }}>
+                    <span className="muted">Score a variant to compute the state distribution.</span>
                   </div>
                 ) : (
-                <div style={{ width: '100%', height: 350 }}>
-<ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                  <AreaChart data={quantumWaveformData}>
-                    <defs>
-                      <linearGradient id="colorProb" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                    <XAxis dataKey="state" stroke="#64748b" tick={{fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace'}} interval={0} angle={-45} textAnchor="end" />
-                    <YAxis stroke="#64748b" tick={{fill: '#64748b', fontSize: 11}} tickFormatter={(val) => `${val}%`} />
-                    <RechartsTooltip 
-                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff', fontFamily: 'monospace' }}
-                      formatter={(value) => [`${value}%`, 'Amplitude |ψ|²']}
-                    />
-                    <Area type="monotone" dataKey="probability" stroke="#22d3ee" strokeWidth={3} fillOpacity={1} fill="url(#colorProb)" animationDuration={300} />
-                  </AreaChart>
-                </ResponsiveContainer>
-</div>
+                  <div style={{ width: '100%', height: 340, minWidth: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <AreaChart data={quantumWaveformData} margin={{ top: 8, right: 8, bottom: 28, left: 0 }}>
+                        <defs>
+                          <linearGradient id="prob" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={C.assay} stopOpacity={0.35} />
+                            <stop offset="100%" stopColor={C.assay} stopOpacity={0.03} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid stroke={C.rule} strokeDasharray="2 4" vertical={false} />
+                        <XAxis dataKey="state" stroke={C.rule}
+                               tick={{ fill: C.ink2, fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }}
+                               interval={0} angle={-45} textAnchor="end" />
+                        <YAxis {...axis} tickFormatter={v => `${v}%`} />
+                        <RTooltip contentStyle={tipStyle} formatter={v => [`${v}%`, '|ψ|²']} />
+                        <Area type="monotone" dataKey="probability" stroke={C.assay} strokeWidth={2}
+                              fill="url(#prob)" animationDuration={300} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
                 )}
+                <div className="figure-cap">
+                  Measured on the backend, not generated in the browser.
+                </div>
               </div>
-            </div>
+            </section>
           )}
 
-          {/* TAB 4 */}
+          {/* ================================================ 4. SCENARIO */}
           {activeTab === 'seir' && (
-            <div className="h-full flex flex-col">
-              <h2 className="text-2xl font-bold text-white mb-1 flex items-center">Epidemiological Scenario (SEIR)</h2>
-              <div className="text-[11px] text-slate-500 leading-tight">
-                Deterministic SEIR integrated with scipy <code>solve_ivp</code>. Homogeneous mixing,
-                constant R₀, no interventions. This is a scenario, not a forecast.
+            <section className="panel">
+              <div className="panel-head">
+                <h2>Epidemic scenario</h2>
+                <p className="lede">
+                  Deterministic SEIR, integrated with scipy <code>solve_ivp</code>. Homogeneous
+                  mixing, constant R₀, no interventions. R₀ is mapped from the binding score across
+                  0.8–4.0, so the scenario is auditable — it is not a forecast.
+                </p>
               </div>
-              {seir && (
-                <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-400">
-                  <span>β={seir.parameters.beta}</span>
-                  <span>σ={seir.parameters.sigma}</span>
-                  <span>γ={seir.parameters.gamma}</span>
-                  <span>Herd-immunity threshold: {seir.indicators.herd_immunity_threshold_percent}%</span>
-                  <span>Capacity breach: {seir.indicators.capacity_breach_day ?? 'none'}</span>
-                </div>
+
+              {seir ? (
+                <>
+                  <dl className="facts" style={{ marginBottom: '1rem' }}>
+                    <div><dt>β</dt><dd>{seir.parameters.beta}</dd></div>
+                    <div><dt>σ</dt><dd>{seir.parameters.sigma}</dd></div>
+                    <div><dt>γ</dt><dd>{seir.parameters.gamma}</dd></div>
+                    <div><dt>R₀</dt><dd>{r0.toFixed(2)}</dd></div>
+                    <div><dt>Peak day</dt><dd>{seir.indicators.peak_day}</dd></div>
+                    <div><dt>Attack rate</dt><dd>{seir.indicators.attack_rate_percent}%</dd></div>
+                    <div><dt>Herd-immunity threshold</dt><dd>{seir.indicators.herd_immunity_threshold_percent}%</dd></div>
+                    <div><dt>Capacity breach</dt><dd>{seir.indicators.capacity_breach_day ?? 'none'}</dd></div>
+                  </dl>
+
+                  <div className="figure">
+                    <div style={{ width: '100%', height: 360, minWidth: 0 }}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                        <LineChart data={seirData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                          <CartesianGrid stroke={C.rule} strokeDasharray="2 4" />
+                          <XAxis dataKey="day" {...axis}
+                                 label={{ value: 'day', position: 'insideBottomRight', offset: -2, fill: C.ink2, fontSize: 11 }} />
+                          <YAxis {...axis} width={48} tickFormatter={compact} />
+                          <RTooltip contentStyle={tipStyle} formatter={v => compact(v)} />
+                          <Legend wrapperStyle={{ fontSize: 12 }} />
+                          <Line type="monotone" dataKey="susceptible" stroke={C.ink3} strokeWidth={1.5} dot={false} name="Susceptible" />
+                          <Line type="monotone" dataKey="exposed" stroke={C.flag} strokeWidth={1.5} dot={false} name="Exposed" />
+                          <Line type="monotone" dataKey="infected" stroke={C.alarm} strokeWidth={2.5} dot={false} name="Infected" />
+                          <Line type="monotone" dataKey="recovered" stroke={C.ok} strokeWidth={1.5} dot={false} name="Recovered" />
+                          <Line type="step" dataKey="capacity" stroke={C.ink} strokeWidth={1.5} strokeDasharray="5 4" dot={false} name="Hospital capacity" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="muted">Score a variant to run the scenario.</p>
               )}
-              <div className="flex-1 bg-slate-950 rounded-xl p-4 border border-slate-800 mt-4">
-                <div style={{ width: '100%', height: 350 }}>
-<ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                  <LineChart data={seirData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                    <XAxis dataKey="day" stroke="#64748b" tick={{fill: '#64748b', fontSize: 12}} />
-                    <YAxis stroke="#64748b" tick={{fill: '#64748b', fontSize: 12}} />
-                    <RechartsTooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px' }}/>
-                    <Line type="monotone" dataKey="susceptible" stroke="#38bdf8" strokeWidth={2} dot={false} name="Susceptible" />
-                    <Line type="monotone" dataKey="exposed" stroke="#a78bfa" strokeWidth={2} dot={false} name="Exposed" />
-                    <Line type="monotone" dataKey="infected" stroke="#f43f5e" strokeWidth={3} dot={false} name="Infected" />
-                    <Line type="monotone" dataKey="recovered" stroke="#10b981" strokeWidth={2} dot={false} name="Recovered" />
-                    <Line type="step" dataKey="capacity" stroke="#eab308" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Critical Hospital Capacity" />
-                  </LineChart>
-                </ResponsiveContainer>
-</div>
-              </div>
-            </div>
+            </section>
           )}
 
-          {/* TAB 5 */}
+          {/* =============================================== 5. CHEMISTRY */}
           {activeTab === 'vqe' && (
-            <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-8 min-w-0">
-              {/* min-w-0 is REQUIRED on grid/flex children that contain a
-                  Recharts ResponsiveContainer. Without it the column sizes to
-                  its content, the chart measures the column, and the two feed
-                  each other through a ResizeObserver loop that hangs the tab. */}
-              <div className="min-w-0">
-                <h2 className="text-2xl font-bold text-white mb-1 flex items-center">
-                  <Syringe className="mr-2 text-cyan-400" size={24}/> Quantum Chemistry (VQE)
-                </h2>
-                <div className="text-[11px] text-slate-500 mb-6 leading-tight">
-                  <span className="text-slate-400 font-bold">VQE:</span> Live variational quantum eigensolver on H₂, checked against exact diagonalisation.
-                </div>
-                <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 space-y-4">
-                  <div>
-                    <div className="text-xs text-slate-400 mb-2 flex items-baseline justify-between">
-                      <span>Bond length: <span className="text-cyan-300 font-mono">{vqeBond.toFixed(4)} Å</span></span>
-                      {vqeView === 'curve' && (
-                        <span className="text-[9px] text-slate-600">(curve view shows all geometries)</span>
-                      )}
-                    </div>
-                    <input
-                      type="range" min="0.3" max="2.4" step="0.01" value={vqeBond}
-                      onChange={e => setVqeBond(parseFloat(e.target.value))}
-                      className="w-full accent-cyan-500"
-                    />
-                    <div className="flex justify-between text-[9px] text-slate-600">
-                      <span>0.3 Å</span><span>equilibrium ≈ 0.74 Å</span><span>2.4 Å</span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button onClick={() => runVqe('single')} disabled={vqeBusy}
-                      className={`flex-1 text-sm font-bold py-2 rounded-lg transition border ${
-                        vqeView === 'single'
-                          ? 'bg-cyan-600 border-cyan-500 text-white'
-                          : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'}`}>
-                      {vqeBusy && vqeView === 'single' ? 'Loading…' : 'This bond length'}
-                    </button>
-                    <button onClick={() => runVqe('curve')} disabled={vqeBusy}
-                      className={`flex-1 text-sm font-bold py-2 rounded-lg transition border ${
-                        vqeView === 'curve'
-                          ? 'bg-cyan-600 border-cyan-500 text-white'
-                          : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'}`}>
-                      {vqeBusy && vqeView === 'curve' ? 'Loading…' : 'Full curve'}
-                    </button>
-                  </div>
-
-                  {vqeError && (
-                    <div className="p-3 bg-rose-950/40 border border-rose-500/50 rounded text-xs text-rose-300">
-                      {vqeError}
-                    </div>
-                  )}
-
-                  {vqeView === 'single' && vqeResult && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-slate-900 p-3 rounded border border-slate-800">
-                          <div className="text-slate-500 text-[10px] uppercase">VQE energy</div>
-                          <div className="text-cyan-300 font-mono text-base">{Number(vqeResult.vqe_energy ?? 0).toFixed(6)}</div>
-                        </div>
-                        <div className="bg-slate-900 p-3 rounded border border-slate-800">
-                          <div className="text-slate-500 text-[10px] uppercase">Exact (diagonalised)</div>
-                          <div className="text-emerald-300 font-mono text-base">{Number(vqeResult.exact_energy ?? 0).toFixed(6)}</div>
-                        </div>
-                      </div>
-                      <div className={`p-3 rounded border text-xs ${vqeResult.within_chemical_accuracy
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                        : 'bg-amber-500/10 border-amber-500/30 text-amber-300'}`}>
-                        Error {Number(vqeResult.absolute_error ?? 0).toExponential(2)} Ha —{' '}
-                        {vqeResult.within_chemical_accuracy ? 'within' : 'outside'} chemical accuracy (1.6e-3)
-                      </div>
-                      <div className="text-[10px] text-slate-500 leading-relaxed">
-                        {vqeResult.n_qubits} qubits · {vqeResult.n_parameters} parameters ·{' '}
-                        {vqeResult.n_pauli_terms} Pauli terms ·{vqeResult.runtime_seconds ? ` ${vqeResult.runtime_seconds}s ·` : ''}
-                        correlation energy {vqeResult.correlation_energy?.toFixed(6)} Ha recovered beyond Hartree-Fock
-                      </div>
-                      <div style={{ width: '100%', height: 160 }}>
-<ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                        <LineChart data={vqeResult.convergence || []}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                          <XAxis dataKey="step" stroke="#475569" tick={{ fontSize: 9 }} />
-                          <YAxis stroke="#475569" tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
-                          <RechartsTooltip contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', fontSize: 11 }} />
-                          <Line type="monotone" dataKey="energy" stroke="#22d3ee" strokeWidth={2} dot={false} name="VQE energy" />
-                        </LineChart>
-                      </ResponsiveContainer>
-</div>
-                      <div className="text-[9px] text-slate-600 text-center -mt-2">Optimiser convergence (Ha vs step)</div>
-                    </div>
-                  )}
-
-                  {vqeView === 'curve' && vqeCurve && (
-                    <div className="space-y-2 pt-2 border-t border-slate-800">
-                      <div className="text-xs text-slate-400">
-                        Dissociation curve — max error{' '}
-                        <span className="text-cyan-300 font-mono">{Number(vqeCurve.max_absolute_error ?? 0).toExponential(2)} Ha</span>
-                        {vqeCurve.all_within_chemical_accuracy && <span className="text-emerald-400"> (all within chemical accuracy)</span>}
-                      </div>
-                      <div style={{ width: '100%', height: 180 }}>
-<ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                        <LineChart data={vqeCurve.points || []}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                          <XAxis dataKey="bond_length" stroke="#475569" tick={{ fontSize: 9 }} label={{ value: 'Å', position: 'insideBottomRight', fontSize: 9, fill: '#475569' }} />
-                          <YAxis stroke="#475569" tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
-                          <RechartsTooltip contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', fontSize: 11 }} />
-                          <Legend wrapperStyle={{ fontSize: 10 }} />
-                          <Line type="monotone" dataKey="exact_energy" stroke="#10b981" strokeWidth={3} dot={false} name="Exact" />
-                          <Line type="monotone" dataKey="vqe_energy" stroke="#22d3ee" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} name="VQE" />
-                        </LineChart>
-                      </ResponsiveContainer>
-</div>
-                      <div className="text-[10px] text-slate-500">
-                        Equilibrium at {vqeCurve.equilibrium_bond_length} Å (experimental: {vqeCurve.experimental_bond_length} Å)
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-800 pt-3">
-                    <b className="text-slate-400">Served from a stored run.</b> The optimisation is
-                    real but was performed ahead of time (<code>build_vqe_data.py</code>) and is served
-                    instantly — running a 60-step optimisation inside a web request tied up the server.
-                    Reproduce any point with <code>notebooks/vqe_h2.ipynb</code>.
-                    <br /><br />
-                    <b className="text-slate-400">Scope.</b> This is a real VQE on H₂ (STO-3G,
-                    Jordan-Wigner), benchmarked against exact diagonalisation of the same
-                    Hamiltonian. It is <b>not</b> protein-ligand binding: a pocket in a minimal
-                    basis is ~10⁵ qubits before error correction. We benchmark what is verifiable
-                    rather than claim what is not.
-                  </div>
-                </div>
+            <section className="panel">
+              <div className="panel-head">
+                <h2>Quantum chemistry</h2>
+                <p className="lede">
+                  A real variational quantum eigensolver on H₂ (STO-3G, Jordan–Wigner), checked
+                  against exact diagonalization of the same Hamiltonian.
+                </p>
               </div>
-              
-              <div className="min-w-0 border border-slate-800 rounded-xl bg-slate-950 p-6 flex flex-col justify-center min-h-[400px]">
-                <div className="text-sm font-bold text-slate-200 mb-1">What is actually being simulated</div>
-                <div className="text-[11px] text-slate-500 mb-5">
-                  The VQE on the left runs on H₂ — two atoms. The protein this project scores is
-                  elsewhere in the app. Keeping those separate is the point of this panel.
+
+              <div className="cols cols-2">
+                <div className="stack" style={{ minWidth: 0 }}>
+                  <div className="sheet stack">
+                    <div>
+                      <label className="field" htmlFor="bond">
+                        Bond length <span className="mono">{vqeBond.toFixed(4)} Å</span>
+                      </label>
+                      <input id="bond" type="range" min="0.3" max="2.4" step="0.01" value={vqeBond}
+                             onChange={e => setVqeBond(parseFloat(e.target.value))} />
+                      <div className="small" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>0.3 Å</span><span>equilibrium ≈ 0.74 Å</span><span>2.4 Å</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button className="btn btn-ghost" style={{ flex: 1 }} aria-pressed={vqeView === 'single'}
+                              onClick={() => runVqe('single')} disabled={vqeBusy}>
+                        {vqeBusy && vqeView === 'single' ? 'Loading…' : 'This bond length'}
+                      </button>
+                      <button className="btn btn-ghost" style={{ flex: 1 }} aria-pressed={vqeView === 'curve'}
+                              onClick={() => runVqe('curve')} disabled={vqeBusy}>
+                        {vqeBusy && vqeView === 'curve' ? 'Loading…' : 'Full curve'}
+                      </button>
+                    </div>
+
+                    {vqeError && <p className="note is-alarm"><b>Failed.</b> {vqeError}</p>}
+
+                    {vqeView === 'single' && vqeResult && (
+                      <div className="stack-sm">
+                        <dl className="facts">
+                          <div><dt>Eigensolver energy</dt><dd>{Number(vqeResult.vqe_energy ?? 0).toFixed(6)} Ha</dd></div>
+                          <div><dt>Exact, diagonalized</dt><dd>{Number(vqeResult.exact_energy ?? 0).toFixed(6)} Ha</dd></div>
+                        </dl>
+                        <p className={`note ${vqeResult.within_chemical_accuracy ? '' : 'is-flag'}`}>
+                          <b>Error {Number(vqeResult.absolute_error ?? 0).toExponential(2)} Ha</b> —{' '}
+                          {vqeResult.within_chemical_accuracy ? 'within' : 'outside'} chemical accuracy (1.6e-3).
+                        </p>
+                        <div className="small">
+                          {vqeResult.n_qubits} qubits · {vqeResult.n_parameters} parameters ·{' '}
+                          {vqeResult.n_pauli_terms} Pauli terms
+                          {vqeResult.runtime_seconds ? ` · ${vqeResult.runtime_seconds}s` : ''} ·
+                          correlation energy {vqeResult.correlation_energy?.toFixed(6)} Ha recovered
+                          beyond Hartree–Fock
+                        </div>
+                        <div style={{ width: '100%', height: 170, minWidth: 0 }}>
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <LineChart data={vqeResult.convergence || []}>
+                              <CartesianGrid stroke={C.rule} strokeDasharray="2 4" />
+                              <XAxis dataKey="step" stroke={C.rule} tick={{ fill: C.ink2, fontSize: 10 }} />
+                              <YAxis stroke={C.rule} tick={{ fill: C.ink2, fontSize: 10 }} domain={['auto', 'auto']} />
+                              <RTooltip contentStyle={tipStyle} />
+                              <Line type="monotone" dataKey="energy" stroke={C.assay} strokeWidth={2} dot={false} name="Energy" />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="figure-cap">Optimiser convergence, Ha against step.</div>
+                      </div>
+                    )}
+
+                    {vqeView === 'curve' && vqeCurve && (
+                      <div className="stack-sm">
+                        <div className="small">
+                          Dissociation curve — maximum error{' '}
+                          <span className="mono">{Number(vqeCurve.max_absolute_error ?? 0).toExponential(2)} Ha</span>
+                          {vqeCurve.all_within_chemical_accuracy && ', all within chemical accuracy'}
+                        </div>
+                        <div style={{ width: '100%', height: 200, minWidth: 0 }}>
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                            <LineChart data={vqeCurve.points || []}>
+                              <CartesianGrid stroke={C.rule} strokeDasharray="2 4" />
+                              <XAxis dataKey="bond_length" stroke={C.rule} tick={{ fill: C.ink2, fontSize: 10 }} />
+                              <YAxis stroke={C.rule} tick={{ fill: C.ink2, fontSize: 10 }} domain={['auto', 'auto']} />
+                              <RTooltip contentStyle={tipStyle} />
+                              <Legend wrapperStyle={{ fontSize: 11 }} />
+                              <Line type="monotone" dataKey="exact_energy" stroke={C.ok} strokeWidth={2.5} dot={false} name="Exact" />
+                              <Line type="monotone" dataKey="vqe_energy" stroke={C.assay} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }} name="Eigensolver" />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="small">
+                          Equilibrium at {vqeCurve.equilibrium_bond_length} Å; experimental value{' '}
+                          {vqeCurve.experimental_bond_length} Å.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="note">
+                    <b>Served from a stored run.</b> The optimisation is real but was performed ahead
+                    of time with <code>build_vqe_data.py</code> and is served instantly — running a
+                    60-step optimisation inside a web request tied up the server. Reproduce any point
+                    with <code>notebooks/vqe_h2.ipynb</code>.
+                  </p>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="bg-slate-900 border border-cyan-700/40 rounded-lg p-4">
-                    <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-cyan-300 font-bold text-sm">H₂ — simulated here</span>
-                      <span className="text-cyan-400 font-mono text-lg">4 qubits</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 leading-relaxed">
-                      2 electrons, 4 spin-orbitals, STO-3G. Small enough that we can diagonalise the
-                      Hamiltonian exactly and <b className="text-slate-300">prove</b> the VQE answer is right.
-                    </div>
+                <div className="stack" style={{ minWidth: 0 }}>
+                  <div className="panel-head" style={{ marginBottom: 0 }}>
+                    <h3 style={{ fontSize: 'var(--t-md)' }}>What is actually being simulated</h3>
+                    <p className="lede">
+                      The eigensolver runs on H₂ — two atoms. The protein this project scores is
+                      elsewhere in the app. Keeping those apart is the point of this panel.
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-2 px-2">
-                    <div className="flex-1 h-px bg-slate-800" />
-                    <span className="text-[10px] text-slate-600 font-mono">~25,000× more qubits</span>
-                    <div className="flex-1 h-px bg-slate-800" />
+                  <div className="sheet">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}>
+                      <b>H₂, simulated here</b>
+                      <span className="mono" style={{ color: C.assay, fontSize: 'var(--t-md)' }}>4 qubits</span>
+                    </div>
+                    <p className="small" style={{ marginTop: '0.4rem' }}>
+                      Two electrons, four spin-orbitals, STO-3G. Small enough that we can diagonalize
+                      the Hamiltonian exactly and prove the eigensolver's answer is right.
+                    </p>
                   </div>
 
-                  <div className="bg-slate-900 border border-amber-700/40 rounded-lg p-4">
-                    <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-amber-300 font-bold text-sm">Protein–drug binding pocket</span>
-                      <span className="text-amber-400 font-mono text-lg">~10⁵ qubits</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ flex: 1, height: 1, background: C.rule }} />
+                    <span className="small mono">~25,000× more qubits</span>
+                    <div style={{ flex: 1, height: 1, background: C.rule }} />
+                  </div>
+
+                  <div className="sheet">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}>
+                      <b>A protein–drug binding pocket</b>
+                      <span className="mono" style={{ color: C.flag, fontSize: 'var(--t-md)' }}>~10⁵ qubits</span>
                     </div>
-                    <div className="text-[11px] text-slate-400 leading-relaxed">
+                    <p className="small" style={{ marginTop: '0.4rem' }}>
                       Thousands of atoms, before error correction. Not a near-term quantum target.
                       Any demo claiming a quantum-computed protein–ligand binding energy is doing
                       something else.
-                    </div>
+                    </p>
                   </div>
-                </div>
 
-                <div className="mt-5 pt-4 border-t border-slate-800 text-[10px] text-slate-500 leading-relaxed">
-                  <b className="text-slate-400">Roadmap, in order:</b> H₂/LiH against exact
-                  diagonalisation (done) → small active spaces of a ligand fragment against CASCI →
-                  a quantum active space embedded in a classical DFT/MM calculation. Binding free
-                  energies remain out of reach.
+                  <p className="note">
+                    <b>Roadmap, in order.</b> H₂ and LiH against exact diagonalization, which is done
+                    → small active spaces of a ligand fragment against CASCI → a quantum active space
+                    embedded in a classical DFT/MM calculation. Binding free energies stay out of reach.
+                  </p>
                 </div>
               </div>
-            </div>
+            </section>
           )}
         </div>
+
+        <footer className="print-hidden" style={{ borderTop: `1px solid ${C.rule}` }}>
+          <div className="shell" style={{ padding: '1.5rem var(--gut) 3rem' }}>
+            <p className="small" style={{ maxWidth: '72ch' }}>
+              BioQubit Labs · Q-Hack India 2026, Quantum Biotech &amp; Chemistry. Trained on Starr et
+              al. (2020) deep mutational scanning of the SARS-CoV-2 receptor-binding domain;
+              interface distances from PDB 6M0J. A research prototype, not a clinical or
+              public-health tool.
+            </p>
+          </div>
+        </footer>
       </main>
-      
-      {/* AI COPILOT */}
-      <div className="fixed bottom-24 right-6 z-50 print-hidden">
+
+      {/* ------------------------------------------------------------ copilot */}
+      <div className="print-hidden">
         {!isChatOpen ? (
-          <button onClick={() => setIsChatOpen(true)} className="bg-cyan-600 hover:bg-cyan-500 text-white p-4 rounded-full shadow-[0_0_20px_rgba(8,145,178,0.4)]">
-            <MessageSquare size={24} />
-          </button>
+          <button className="btn" style={{ position: 'fixed', right: '1.25rem', bottom: '1.25rem', zIndex: 50 }}
+                  onClick={() => setIsChatOpen(true)}>Ask about this run</button>
         ) : (
-          <div className="w-80 h-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-            <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
-              <span className="font-bold text-sm text-white flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>Q-VIRA Copilot</span>
-              <button onClick={() => setIsChatOpen(false)} className="text-slate-400 hover:text-white"><X size={20} /></button>
+          <div className="copilot">
+            <div className="copilot-head">
+              <div>
+                <b style={{ fontSize: 'var(--t-sm)' }}>Copilot</b>
+                <div className="small">
+                  {health?.copilot_providers?.length
+                    ? `grounded in this run · ${health.copilot_providers.join(' → ')}`
+                    : 'grounded in this run'}
+                </div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsChatOpen(false)}>Close</button>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-900/50">
-              {chatMessages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] p-3 rounded-xl text-sm shadow-md ${msg.role === 'user' ? 'bg-cyan-600 text-white rounded-br-sm' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-sm'}`}>{msg.text}</div>
+            <div className="copilot-log custom-scrollbar">
+              {chatMessages.map((m, i) => (
+                <div key={i} className={`msg ${m.role === 'user' ? 'msg-you' : 'msg-ai'}`}>
+                  {m.text}
+                  {m.meta && <div className="msg-meta">answered by {m.meta}</div>}
                 </div>
               ))}
               <div ref={chatEndRef} />
             </div>
-            <form onSubmit={handleSendMessage} className="p-3 bg-slate-800 border-t border-slate-700 flex gap-2">
-              <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
-                placeholder={health && health.copilot_enabled === false
-                  ? 'Copilot disabled (no GEMINI_API_KEY)'
-                  : (chatBusy ? 'Thinking...' : 'Ask about this run...')}
-                disabled={chatBusy || (health && health.copilot_enabled === false)}
-                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none disabled:opacity-50" />
-              <button type="submit" className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg"><Send size={18} /></button>
+            <form className="copilot-form" onSubmit={handleSendMessage}>
+              <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
+                     placeholder={health && health.copilot_enabled === false
+                       ? 'Copilot is not configured'
+                       : (chatBusy ? 'Thinking…' : 'Ask about the score, the circuit, the scenario…')}
+                     disabled={chatBusy || (health && health.copilot_enabled === false)} />
+              <button className="btn btn-sm" type="submit" disabled={chatBusy}>Send</button>
             </form>
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

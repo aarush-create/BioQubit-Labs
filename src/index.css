@@ -2,7 +2,286 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Was referenced in App.jsx but never defined. */
-.custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+/* ===========================================================================
+   Q-VIRA design system — "the bench record"
+   ---------------------------------------------------------------------------
+   This is a measuring instrument, so it is built like a lab worksheet rather
+   than a dashboard: ruled rows instead of floating cards, hairlines instead of
+   shadows, and one accent reserved for things that were actually measured.
+
+   Colour comes from the bench — pale sage paper under fluorescent light, and
+   the deep blue-teal of a Coomassie-stained protein band for every measured
+   value. Ochre marks a result you must read carefully; oxblood is held back
+   for genuine failure so it still means something when it shows up.
+   ========================================================================= */
+
+:root {
+  --paper:      #e8ebe4;
+  --sheet:      #f6f7f3;
+  --sheet-sunk: #e1e5dc;
+  --ink:        #15191a;
+  --ink-2:      #58615d;
+  --ink-3:      #868e89;
+  --rule:       #c4cabf;
+  --rule-soft:  #d7dcd2;
+
+  --assay:      #1b4d5a;   /* measured values — the one accent */
+  --assay-soft: #d8e4e5;
+  --flag:       #8a5a12;   /* read this carefully */
+  --flag-soft:  #f1e7d4;
+  --alarm:      #8e2f2a;   /* something is actually broken */
+  --alarm-soft: #f3dedc;
+  --ok:         #2f6b43;
+
+  --sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* 1.333 scale */
+  --t-xs:   0.6875rem;
+  --t-sm:   0.8125rem;
+  --t-base: 0.9375rem;
+  --t-md:   1.125rem;
+  --t-lg:   1.5rem;
+  --t-xl:   2rem;
+  --t-2xl:  2.75rem;
+
+  --gut: 1.5rem;
+  --radius: 2px;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  padding-bottom: 4.5rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--t-base);
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--assay); color: #fff; }
+
+h1, h2, h3, h4 {
+  font-family: var(--sans);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  margin: 0;
+  text-wrap: balance;
+}
+
+p { margin: 0 0 0.75em; max-width: 68ch; }
+p:last-child { margin-bottom: 0; }
+a { color: var(--assay); text-underline-offset: 2px; }
+code, .mono, .num { font-family: var(--mono); font-feature-settings: 'zero' 1; }
+b, strong { font-weight: 600; }
+
+/* --------------------------------------------------------------- scaffold */
+
+.shell { max-width: 74rem; margin: 0 auto; padding: 0 var(--gut); }
+
+.masthead {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+.masthead-in { display: flex; align-items: baseline; gap: 0.9rem; padding: 0.8rem 0; flex-wrap: wrap; }
+.wordmark { font-size: var(--t-md); font-weight: 700; letter-spacing: -0.03em; }
+.wordmark span { color: var(--assay); }
+.masthead-sub { font-size: var(--t-xs); color: var(--ink-2); }
+.masthead-right { margin-left: auto; display: flex; align-items: baseline; gap: 1.1rem; flex-wrap: wrap; }
+
+/* ------------------------------------------------------------------ hero */
+/* The hero is the measurement, not a slogan: the question this tool answers,
+   then the live readout of whatever is currently scored. */
+
+.hero { padding: 2.5rem 0 0.5rem; }
+.hero-q { font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.035em; max-width: 19ch; margin-bottom: 0.65rem; }
+.hero-sub { color: var(--ink-2); max-width: 62ch; }
+
+.readout { margin-top: 2rem; border-top: 2px solid var(--ink); padding-top: 0.9rem; }
+.readout-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+.readout-label { font-size: var(--t-xs); color: var(--ink-2); margin-bottom: 0.2rem; }
+.readout-value {
+  font-family: var(--mono); font-size: var(--t-2xl); font-weight: 500;
+  line-height: 1; letter-spacing: -0.03em; color: var(--assay);
+}
+.readout-value.is-idle { color: var(--ink-3); }
+.readout-err { font-family: var(--mono); font-size: var(--t-md); color: var(--ink-2); margin-left: 0.3rem; }
+.readout-meta { font-size: var(--t-xs); color: var(--ink-2); font-family: var(--mono); text-align: right; }
+
+/* a position ruler across the trained domain, with each substitution marked */
+.ruler { position: relative; height: 56px; margin-top: 1.25rem; }
+.ruler-line { position: absolute; left: 0; right: 0; top: 30px; height: 1px; background: var(--rule); }
+.ruler-tick { position: absolute; top: 25px; width: 1px; height: 11px; background: var(--rule); }
+.ruler-end { position: absolute; top: 40px; font-family: var(--mono); font-size: var(--t-xs); color: var(--ink-3); }
+.ruler-mark { position: absolute; top: 14px; width: 2px; height: 30px; background: var(--assay); }
+.ruler-mark.is-out { background: var(--flag); }
+.ruler-flag {
+  position: absolute; top: -2px; transform: translateX(-50%);
+  font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap;
+  color: var(--assay); font-weight: 500;
+}
+.ruler-flag.is-out { color: var(--flag); }
+
+/* ------------------------------------------------------------------- bar */
+
+.bar { height: 9px; background: var(--sheet-sunk); border-radius: 1px; overflow: hidden; }
+.bar-fill {
+  height: 100%; background: var(--assay); border-radius: 1px;
+  transform-origin: left center;
+  animation: lane 420ms cubic-bezier(.2,.7,.3,1) both;
+}
+.bar-fill.is-flagged { background: var(--flag); }
+@keyframes lane { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .bar-fill { animation: none; } }
+
+/* ------------------------------------------------------------------ tabs */
+
+.rail { display: flex; gap: 1.6rem; border-bottom: 1px solid var(--rule); overflow-x: auto; scrollbar-width: none; }
+.rail::-webkit-scrollbar { display: none; }
+.rail button {
+  appearance: none; background: none; border: 0; cursor: pointer; font: inherit;
+  font-size: var(--t-sm); color: var(--ink-2); padding: 0.75rem 0; white-space: nowrap;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.rail button:hover { color: var(--ink); }
+.rail button[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--assay); font-weight: 600; }
+
+/* ---------------------------------------------------------------- panels */
+
+.panel { padding: 2rem 0 3.5rem; }
+.panel-head { margin-bottom: 1.5rem; }
+.panel-head h2 { font-size: var(--t-lg); margin-bottom: 0.3rem; }
+.panel-head .lede { color: var(--ink-2); font-size: var(--t-sm); max-width: 72ch; }
+
+.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1.25rem; }
+.sheet-sunk { background: var(--sheet-sunk); border: 1px solid var(--rule-soft); border-radius: var(--radius); padding: 1rem; }
+
+/* a note set as a hanging rule, like a footnote, rather than boxed in */
+.note { border-left: 2px solid var(--rule); padding-left: 0.9rem; font-size: var(--t-sm); color: var(--ink-2); max-width: 72ch; }
+.note b { color: var(--ink); }
+.note.is-flag { border-left-color: var(--flag); }
+.note.is-flag b { color: var(--flag); }
+.note.is-alarm { border-left-color: var(--alarm); }
+.note.is-alarm b { color: var(--alarm); }
+
+/* key/value pairs read as a definition list, not a row of little cards */
+.facts { display: flex; flex-wrap: wrap; gap: 0 2.25rem; margin: 0; }
+.facts > div { padding: 0.45rem 0; }
+.facts dt { font-size: var(--t-xs); color: var(--ink-2); }
+.facts dd { margin: 0; font-family: var(--mono); font-size: var(--t-sm); }
+
+/* ------------------------------------------------------------------ lane */
+/* The feed. Each deposit is a ruled lane: accession, what distinguishes it,
+   and the measured score drawn as a bar. */
+
+.lanes { border-top: 1px solid var(--ink); }
+.lane { display: grid; gap: 0.3rem 1.25rem; padding: 0.95rem 0; border-bottom: 1px solid var(--rule-soft); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 46rem) { .lane { grid-template-columns: 10.5rem minmax(0, 1fr) 13rem; align-items: start; } }
+.lane-acc { font-family: var(--mono); font-size: var(--t-sm); }
+.lane-desc { font-size: var(--t-xs); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lane-score { text-align: left; }
+@media (min-width: 46rem) { .lane-score { text-align: right; } }
+.lane-score .v { font-family: var(--mono); font-size: var(--t-md); color: var(--assay); }
+.lane-score .k { font-size: var(--t-xs); color: var(--ink-2); overflow-wrap: anywhere; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.chip {
+  font-family: var(--mono); font-size: var(--t-xs); padding: 0.1rem 0.4rem;
+  border: 1px solid var(--rule); border-radius: var(--radius);
+  color: var(--ink-2); background: var(--sheet);
+}
+.chip .s { color: var(--ink-3); margin-left: 0.35rem; }
+.chip.is-unique { border-color: var(--assay); color: var(--assay); background: var(--assay-soft); font-weight: 500; }
+.chip.is-unique .s { opacity: .7; }
+.chip.no-structure { border-style: dashed; opacity: .72; }
+
+/* ---------------------------------------------------------------- inputs */
+
+label.field { display: block; font-size: var(--t-sm); color: var(--ink-2); margin-bottom: 0.3rem; }
+input[type='text'], select, textarea {
+  width: 100%; font: inherit; font-size: var(--t-sm);
+  background: var(--sheet); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: var(--radius); padding: 0.5rem 0.6rem;
+}
+input.mono { font-family: var(--mono); }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 2px solid var(--assay); outline-offset: 2px;
+}
+input[type='range'] { width: 100%; accent-color: var(--assay); padding: 0; border: 0; background: none; }
+
+.btn {
+  appearance: none; font: inherit; font-size: var(--t-sm); font-weight: 600; cursor: pointer;
+  padding: 0.55rem 1.1rem; border-radius: var(--radius);
+  border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+}
+.btn:hover { background: var(--assay); border-color: var(--assay); }
+.btn[disabled] { opacity: .45; cursor: default; }
+.btn-ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
+.btn-ghost:hover { background: var(--sheet); border-color: var(--ink); color: var(--ink); }
+.btn-ghost[aria-pressed='true'] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn-sm { padding: 0.3rem 0.65rem; font-size: var(--t-xs); font-weight: 500; }
+
+/* ----------------------------------------------------------------- misc */
+
+.hr { border: 0; border-top: 1px solid var(--rule); margin: 1.5rem 0; }
+.muted { color: var(--ink-2); }
+.small { font-size: var(--t-xs); color: var(--ink-2); }
+.stack > * + * { margin-top: 1rem; }
+.stack-sm > * + * { margin-top: 0.5rem; }
+.cols { display: grid; gap: 2rem; }
+@media (min-width: 60rem) { .cols-2 { grid-template-columns: 1fr 1fr; } }
+
+details > summary { cursor: pointer; font-size: var(--t-sm); color: var(--ink-2); }
+details > summary:hover { color: var(--ink); }
+
+.figure { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1rem; }
+.figure-cap { font-size: var(--t-xs); color: var(--ink-2); margin-top: 0.6rem; }
+
+/* --------------------------------------------------------------- overlay */
+
+.overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: color-mix(in srgb, var(--ink) 58%, transparent);
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+}
+.dialog {
+  background: var(--paper); border: 1px solid var(--ink); border-radius: var(--radius);
+  max-width: 44rem; width: 100%; max-height: 86vh; overflow-y: auto; padding: 1.75rem;
+}
+
+/* ---------------------------------------------------------------- copilot */
+
+.copilot {
+  position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 50;
+  width: min(23rem, calc(100vw - 2.5rem)); height: min(28rem, calc(100vh - 6rem));
+  background: var(--paper); border: 1px solid var(--ink); border-radius: var(--radius);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.copilot-head { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--rule); background: var(--sheet); }
+.copilot-log { flex: 1; overflow-y: auto; padding: 0.85rem; }
+.msg { font-size: var(--t-sm); margin-bottom: 0.8rem; max-width: 92%; }
+.msg-you { margin-left: auto; width: fit-content; background: var(--ink); color: var(--paper); padding: 0.45rem 0.65rem; border-radius: var(--radius); }
+.msg-ai { border-left: 2px solid var(--assay); padding-left: 0.7rem; }
+.msg-meta { font-size: var(--t-xs); color: var(--ink-3); margin-top: 0.3rem; }
+.copilot-form { display: flex; gap: 0.4rem; padding: 0.6rem; border-top: 1px solid var(--rule); background: var(--sheet); }
+
+.custom-scrollbar::-webkit-scrollbar { width: 8px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: var(--sheet-sunk); }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 4px; }
+
+/* ----------------------------------------------------------------- print */
+
+@media print {
+  .print-hidden { display: none !important; }
+  body { background: #fff; }
+  .panel, .sheet, .lane, .figure { break-inside: avoid; }
+  .custom-scrollbar { overflow: visible !important; max-height: none !important; }
+}

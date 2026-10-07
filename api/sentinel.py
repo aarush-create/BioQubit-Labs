@@ -46,6 +46,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -453,6 +455,130 @@ def refresh(limit: int = 40) -> dict:
     _save_cache(payload)
     print(f"[sentinel] analysed {len(analysed)}, skipped {len(skipped)} -> {CACHE_PATH}")
     return payload
+
+
+# ------------------------------------------------ background auto-refresh
+#
+# The committed cache is the seed, not the ceiling. Serving it forever means
+# the feed shows whatever date someone last ran this file by hand, which
+# reads as a dead demo however good the data behind it is.
+#
+# So: serve whatever is in memory INSTANTLY (never block a page load on
+# NCBI), and refresh it on a worker thread when it goes stale. This host's
+# filesystem is ephemeral, so the fresh payload lives in memory and the disk
+# write stays best-effort -- a restart falls back to the committed cache and
+# triggers another refresh.
+
+AUTO_REFRESH = os.getenv("SENTINEL_AUTO_REFRESH", "1") != "0"
+MAX_AGE_HOURS = float(os.getenv("SENTINEL_MAX_AGE_HOURS", "12"))
+MIN_RETRY_SECONDS = float(os.getenv("SENTINEL_MIN_RETRY_SECONDS", "900"))
+
+_live: dict | None = None
+_lock = threading.Lock()
+_refreshing = False
+_last_attempt = 0.0
+_last_error: str | None = None
+
+
+def _parse_ts(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def age_hours(payload: dict | None = None) -> float | None:
+    """How old is this payload, in hours? None if it has no usable timestamp."""
+    payload = payload if payload is not None else current()
+    ts = _parse_ts((payload or {}).get("fetched_at"))
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - ts).total_seconds() / 3600.0
+
+
+def current() -> dict:
+    """The payload to serve right now: the freshest we have, never a blank."""
+    with _lock:
+        if _live is not None:
+            return _live
+    return load_cache()
+
+
+def is_stale(payload: dict | None = None) -> bool:
+    age = age_hours(payload)
+    return age is None or age > MAX_AGE_HOURS
+
+
+def status() -> dict:
+    """What the UI needs in order to describe the feed honestly."""
+    payload = current()
+    age = age_hours(payload)
+    return {
+        "fetched_at": payload.get("fetched_at"),
+        "age_hours": round(age, 2) if age is not None else None,
+        "stale": is_stale(payload),
+        "auto_refresh": AUTO_REFRESH,
+        "max_age_hours": MAX_AGE_HOURS,
+        "refreshing": _refreshing,
+        "last_error": _last_error,
+    }
+
+
+def _refresh_worker(limit: int) -> None:
+    global _live, _refreshing, _last_error
+    try:
+        payload = refresh(limit)
+        with _lock:
+            _live = payload
+            _last_error = None
+        print(f"[sentinel] auto-refresh ok: {payload.get('n_analysed')} analysed")
+    except Exception as exc:          # a background thread must never kill the app
+        _last_error = f"{type(exc).__name__}: {exc}"
+        print(f"[sentinel] auto-refresh failed: {_last_error}")
+    finally:
+        _refreshing = False
+
+
+def refresh_async(limit: int = 40, force: bool = False) -> dict:
+    """Kick a refresh onto a worker thread and return immediately.
+
+    Says whether one actually started, so a judge pressing the button twice
+    gets an honest 'already running' instead of a second NCBI hit.
+    """
+    global _refreshing, _last_attempt
+    with _lock:
+        if _refreshing:
+            return {"started": False, "reason": "a refresh is already running"}
+        since = time.time() - _last_attempt
+        if not force and since < MIN_RETRY_SECONDS:
+            return {"started": False,
+                    "reason": f"last attempt {int(since)}s ago; minimum "
+                              f"interval is {int(MIN_RETRY_SECONDS)}s"}
+        _refreshing = True
+        _last_attempt = time.time()
+    threading.Thread(target=_refresh_worker, args=(limit,),
+                     name="sentinel-refresh", daemon=True).start()
+    return {"started": True}
+
+
+def start_auto_refresh() -> None:
+    """Called once at startup. Refreshes only when the cache has gone stale."""
+    if not AUTO_REFRESH:
+        print("[sentinel] auto-refresh disabled (SENTINEL_AUTO_REFRESH=0)")
+        return
+    age = age_hours()
+    if age is None:
+        print("[sentinel] no usable cache timestamp - refreshing")
+    elif age > MAX_AGE_HOURS:
+        print(f"[sentinel] cache is {age:.1f}h old (limit {MAX_AGE_HOURS}h) - refreshing")
+    else:
+        print(f"[sentinel] cache is {age:.1f}h old - fresh enough")
+        return
+    refresh_async(force=True)
 
 
 if __name__ == "__main__":

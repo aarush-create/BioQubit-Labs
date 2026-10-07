@@ -28,6 +28,7 @@ from epidemiology import simulate
 from quantum_engine import engine
 import vqe as vqe_mod
 import sentinel as sentinel_mod
+import copilot as copilot_mod
 from reference_panel import nearest_reference, panel_size, get_reference, list_references
 
 API_VERSION = "2.1.0"
@@ -90,6 +91,16 @@ async def lifespan(app: FastAPI):
         print("         Run `python train_vqc.py --data <csv>` and redeploy.")
     else:
         print(f"Loaded trained VQC: {engine.metadata.get('data_source', 'unknown source')}")
+
+    # Seeds from the committed cache, then refreshes in the background if it
+    # has gone stale. Never blocks startup, never blocks a request.
+    try:
+        sentinel_mod.start_auto_refresh()
+    except Exception as exc:
+        print(f"[sentinel] auto-refresh could not start: {type(exc).__name__}: {exc}")
+
+    providers = copilot_mod.configured()
+    print(f"Copilot chain: {' -> '.join(providers) if providers else 'NONE (no API key set)'}")
     yield
 
 
@@ -155,9 +166,11 @@ def health_check():
         "training_metadata": engine.metadata or None,
         "reference_panel_size": panel_size(),
         "featuriser": "physicochemical-v1",
-        "copilot_enabled": bool(os.getenv("GEMINI_API_KEY")),
+        "copilot_enabled": bool(copilot_mod.configured()),
+        "copilot_providers": copilot_mod.configured(),
         "vqe_available": vqe_mod.available(),
-        "sentinel_cached_at": sentinel_mod.load_cache().get("fetched_at"),
+        "sentinel_cached_at": sentinel_mod.current().get("fetched_at"),
+        "sentinel": sentinel_mod.status(),
     }
 
 
@@ -350,41 +363,37 @@ def seir(req: SeirRequest):
 
 @app.get("/sentinel")
 def sentinel_feed():
-    """Cached surveillance feed: recently deposited SARS-CoV-2 spikes, with
-    their RBD substitutions scored by the trained VQC.
+    """Surveillance feed: recently deposited SARS-CoV-2 spikes, with their RBD
+    substitutions scored by the trained VQC.
 
-    Cached deliberately — see sentinel.py. The fetch timestamp is returned so
-    the UI can show that this is not live data.
+    Always answers immediately from memory. A stale cache is refreshed on a
+    background thread (see sentinel.py), so the fetch timestamp moves on its
+    own without a page load ever waiting on NCBI.
     """
-    cache = sentinel_mod.load_cache()
+    cache = sentinel_mod.current()
     if not cache:
         raise HTTPException(
             503,
             "No sentinel cache. Run `python sentinel.py` to build it, then commit "
             "sentinel_cache.json.",
         )
-    return cache
+    if sentinel_mod.is_stale(cache):
+        sentinel_mod.refresh_async()          # returns at once; serves stale meanwhile
+    return {**cache, "feed_status": sentinel_mod.status()}
 
 
 @app.post("/sentinel/refresh")
 def sentinel_refresh():
-    """Re-query NCBI and rebuild the cache.
+    """Ask for a re-query of NCBI. Returns straight away.
 
-    Disabled in production by default: Render's filesystem is ephemeral, so a
-    refresh there is lost on restart. Build the cache locally and commit it.
-    Set ALLOW_SENTINEL_REFRESH=1 to enable.
+    The work happens on a background thread, so this never holds a request
+    open for the length of an NCBI round trip. Poll /sentinel for the result:
+    feed_status.refreshing tells you whether one is still in flight.
     """
-    if os.getenv("ALLOW_SENTINEL_REFRESH") != "1":
-        raise HTTPException(
-            403,
-            "Refresh is disabled. The cache is built locally with "
-            "`python sentinel.py` and committed, because this host's filesystem "
-            "is ephemeral. Set ALLOW_SENTINEL_REFRESH=1 to override.",
-        )
-    try:
-        return sentinel_mod.refresh()
-    except RuntimeError as exc:
-        raise HTTPException(503, str(exc))
+    if os.getenv("ALLOW_SENTINEL_REFRESH", "1") == "0":
+        raise HTTPException(403, "Refresh is disabled on this deployment.")
+    outcome = sentinel_mod.refresh_async()
+    return {**outcome, "feed_status": sentinel_mod.status()}
 
 
 @app.get("/vqe/geometries")
@@ -423,68 +432,18 @@ def vqe_curve():
 
 @app.post("/copilot")
 def copilot(req: CopilotRequest):
-    """Gemini-backed explainer.
+    """Explainer, backed by a provider chain: Gemini first, Grok as fallback.
 
-    Gemini explains; it never computes. The numbers come from the quantum and
-    SEIR endpoints and are passed in as context. The system prompt forbids
-    inventing figures, which is what keeps the demo defensible.
+    The model explains; it never computes. Every number comes from the quantum
+    and SEIR endpoints and is passed in as context, and the system prompt
+    forbids inventing figures -- that is what keeps the demo defensible.
+
+    If the primary provider is rate-limited or down, the chain falls through
+    to the next one rather than failing. The reply says which one answered.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise HTTPException(503, "Copilot disabled: GEMINI_API_KEY is not set.")
-
-    import httpx
-
-    # Default to a FREE-TIER model. gemini-3.1-pro-preview is paid-tier only
-    # (Google AI Studio shows "Not available" on Free), and the copilot only
-    # explains numbers the other endpoints already computed -- it does no
-    # reasoning that needs a Pro model. Override with GEMINI_MODEL if you have
-    # billing enabled.
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    system = (
-        "You are the Q-VIRA copilot, explaining a hybrid quantum-classical "
-        "bioinformatics dashboard to a technical judge.\n"
-        "RULES:\n"
-        "1. Use ONLY the numbers in CONTEXT. Never invent or estimate a figure.\n"
-        "2. If the answer is not in CONTEXT, say you do not have it.\n"
-        "3. Be precise about what is real: a 4-qubit PennyLane simulation with "
-        "a data re-uploading ansatz, physicochemical descriptors (not ESM-2 "
-        "unless CONTEXT says so), and a deterministic SEIR scenario.\n"
-        "4. Never claim quantum advantage. At 4 qubits there is none; the "
-        "circuit is a feasibility study.\n"
-        "5. This is a research prototype, not a clinical or public-health tool.\n"
-        "6. Answer in under 120 words."
-    )
-    payload = {
-        "systemInstruction": {"parts": [{"text": system}]},
-        "contents": [
-            {
-                "role": "user",
-                "parts": [
-                    {
-                        "text": f"CONTEXT:\n{json.dumps(req.context or {}, indent=2)}\n\n"
-                                f"QUESTION: {req.question}"
-                    }
-                ],
-            }
-        ],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 400},
-    }
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     try:
-        with httpx.Client(timeout=30) as client:
-            resp = client.post(url, headers={"x-goog-api-key": api_key}, json=payload)
-        if resp.status_code != 200:
-            raise HTTPException(502, f"Gemini error {resp.status_code}: {resp.text[:200]}")
-        data = resp.json()
-        parts = data["candidates"][0]["content"]["parts"]
-        text = "".join(p.get("text", "") for p in parts).strip()
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(502, f"Copilot upstream failure: {type(exc).__name__}")
-
-    if not text:
-        raise HTTPException(502, "Copilot returned an empty response.")
-    return {"answer": text, "model": model, "grounded_in": list((req.context or {}).keys())}
+        result = copilot_mod.ask(req.question, req.context)
+    except RuntimeError as exc:
+        msg = str(exc)
+        raise HTTPException(503 if "no provider key" in msg else 502, msg)
+    return {**result, "grounded_in": list((req.context or {}).keys())}
