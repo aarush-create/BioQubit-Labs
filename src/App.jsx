@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { 
   Activity, Dna, Play, Syringe, MessageSquare, 
-  X, Send, Info, HelpCircle, ArrowRight, AlertTriangle, Radio, Cpu
+  X, Send, Info, Maximize2, HelpCircle, ArrowRight, AlertTriangle, Radio, Cpu
 } from 'lucide-react';
 
 const HelpTooltip = ({ text }) => (
@@ -50,7 +50,8 @@ export default function App() {
   const [sentinel, setSentinel] = useState(null);
   const [sentinelError, setSentinelError] = useState(null);
   const [metrics, setMetrics] = useState(null);       // held-out results, from /metrics
-  const [showMetrics, setShowMetrics] = useState(false);         // backend self-report
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [structureFullscreen, setStructureFullscreen] = useState(false);         // backend self-report
   
   const [pdbInput, setPdbInput] = useState("6m0j");
   
@@ -275,6 +276,34 @@ export default function App() {
         }
       `}</style>
       
+      {structureFullscreen && (
+        <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col print-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 shrink-0">
+            <div>
+              <div className="text-white font-bold">
+                {(pdbInput || '6m0j').toUpperCase()}
+                <span className="text-slate-500 font-normal text-sm ml-3">
+                  experimentally-solved structure · RCSB PDB
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                Drag to rotate · scroll to zoom · the ACE2 interface distances used by the model
+                were measured from this complex
+              </div>
+            </div>
+            <button onClick={() => setStructureFullscreen(false)}
+              className="flex items-center gap-2 text-slate-400 hover:text-white text-sm px-3 py-1.5 rounded hover:bg-slate-800 transition">
+              <X size={18} /> Close
+            </button>
+          </div>
+          <iframe
+            key={`fs-${pdbInput}`}
+            src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showtitle=0&closepopup=1`}
+            className="flex-1 w-full border-0" title="3D Protein Structure, fullscreen"
+          ></iframe>
+        </div>
+      )}
+
       {showMetrics && metrics && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 print-hidden"
              onClick={() => setShowMetrics(false)}>
@@ -396,7 +425,7 @@ export default function App() {
       )}
 
       <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 print-hidden">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-y-3">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20">
               <Dna className="w-8 h-8 text-cyan-400" />
@@ -409,6 +438,16 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {metrics?.vqc?.roc_auc && (
+              <button onClick={() => setShowMetrics(true)}
+                className="hidden lg:flex flex-col items-end mr-1 px-3 py-1 rounded-lg hover:bg-slate-800/60 transition print-hidden"
+                title="Held-out AUC, measured on 946 unseen rows. Click for the full model card.">
+                <span className="text-[9px] text-slate-500 uppercase tracking-wider leading-none">held-out AUC</span>
+                <span className="text-cyan-300 font-mono font-bold text-sm leading-tight">
+                  {metrics.vqc.roc_auc.toFixed(4)}
+                </span>
+              </button>
+            )}
             <button onClick={() => setShowMetrics(true)}
               className="flex items-center gap-2 text-slate-400 hover:text-white text-sm font-medium transition print-hidden">
               <Activity size={16}/> Results
@@ -432,7 +471,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
 
         {apiError && (
           <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 border ${
@@ -546,7 +585,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-800 w-fit print-hidden">
+        <div className="flex gap-2 bg-slate-900 p-1.5 rounded-xl mb-6 border border-slate-800 w-full lg:w-fit overflow-x-auto print-hidden">
           {[
             { id: 'sentinel', label: '1. Surveillance Feed' },
             { id: 'genomics', label: '2. Score a Variant' },
@@ -557,7 +596,7 @@ export default function App() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap shrink-0 ${
                 activeTab === tab.id 
                   ? 'bg-slate-800 text-cyan-400 shadow-md border border-slate-700' 
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -833,7 +872,7 @@ export default function App() {
 </div>
                 </div>
 
-                <div className="relative border border-slate-800 rounded-xl bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
+                <div className="relative border border-slate-800 rounded-xl bg-slate-950 flex flex-col items-center justify-center overflow-hidden min-h-[520px] lg:min-h-[680px]">
                   {isFolding ? (
                     <div className="flex flex-col items-center justify-center h-full w-full bg-slate-900 border border-rose-500/50">
                       <Cpu size={48} className="text-rose-400 mb-4 animate-pulse" />
@@ -842,14 +881,17 @@ export default function App() {
                     </div>
                   ) : (
                     <>
-                      <iframe 
-                        src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`} 
+                      <iframe
+                        key={pdbInput}
+                        src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0&width=100%&height=100%&closepopup=1`}
                         width="100%" height="100%" className="absolute inset-0 z-0" title="3D Protein Structure"
                       ></iframe>
 
-                      <div className="absolute top-4 right-4 bg-slate-900/85 border border-slate-600 text-slate-300 font-mono text-[10px] px-3 py-1 rounded backdrop-blur-sm z-20">
-                        EXPERIMENTAL STRUCTURE · RCSB
-                      </div>
+                      <button
+                        onClick={() => setStructureFullscreen(true)}
+                        className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-600 hover:border-cyan-500 text-slate-300 hover:text-cyan-300 font-mono text-[10px] px-3 py-1.5 rounded backdrop-blur-sm transition">
+                        <Maximize2 size={11} /> EXPAND
+                      </button>
                     </>
                   )}
                   
