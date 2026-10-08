@@ -34,12 +34,17 @@ floating point across platforms. We report the run that produced the shipped
 **Read AUC, not accuracy.** All models score ~0.69–0.73 accuracy because they
 mostly answer "yes" on a 68%-positive dataset. Accuracy is uninformative here.
 
-**The honest claim:** the VQC reaches 0.672, clearly above chance but below
-classical baselines on identical features. We report the gap rather than hide it.
+**The honest claim:** the VQC reaches 0.747, clearly above chance but below all
+three classical baselines on identical features. We report the gap rather than
+hide it.
 
 ## How we got there — three ablations
 
 ### 1. Feature count: fewer is better
+
+Measured **before** ablation 5 replaced `relative_position` with `ace2_distance`,
+so the VQC column here is the pre-structure model. The ordering is what matters:
+adding descriptors past four made every model worse.
 
 | Feature set | k | MLP AUC | VQC AUC |
 |---|---|---|---|
@@ -138,11 +143,13 @@ Note the interaction: 6 layers HELPED at 4 qubits and HURT badly at 8 qubits
 (0.5581). Depth and width are not independent — wider circuits hit trainability
 problems at a depth that narrower ones tolerate.
 
-**Conclusion.** The remaining gap to the classical baselines (0.682 vs 0.715
-logistic, 0.740 MLP) is not an artefact of under-training. With only four
-residue descriptors there is a ceiling near 0.74, and the single Pauli-Z readout
-of a 4-qubit circuit does not reach it. Closing it would need a richer
-representation (ESM-2 embeddings) rather than a bigger circuit.
+**Conclusion.** The gap to the classical baselines is not an artefact of
+under-training. These runs predate ablation 5; after it the shipped VQC reaches
+0.7468 against 0.7504 SVM, 0.7661 MLP and 0.7799 logistic regression — the same
+ordering, a much smaller gap. With only four residue descriptors there is a
+ceiling near 0.78, and the single Pauli-Z readout of a 4-qubit circuit does not
+quite reach it. Closing it needs a richer representation (ESM-2 embeddings)
+rather than a bigger circuit.
 
 ## Ablation 5 — structure beats more chemistry
 
@@ -178,6 +185,20 @@ learned that interface mutations are the ones that risk breaking binding. Note
 N501Y in reality *enhances* ACE2 affinity, so the model is wrong on that specific
 famous case; it has learned the population tendency, not per-residue biology.
 
+## What we did NOT measure: the ansatz
+
+We use data re-uploading (Pérez-Salinas et al. 2020) because the literature
+argues a single encoding followed by entangling layers is limited in the
+functions it can express. We did **not** run a controlled single-encoding versus
+re-uploading comparison on this dataset, so there is no number here for what the
+choice bought us, and we do not quote one anywhere else.
+
+Earlier drafts of this repo cited a 0.59 → 0.87 figure for that comparison. It
+was not reproducible from any committed script, and 0.87 is above the shipped
+model's own held-out AUC, so it has been withdrawn from every document. A
+controlled ablation with the `--single-encoding` flag is the right way to settle
+it, and it is on the Round 2 list.
+
 ## Caveat found in production: unresolved sites
 
 The crystal structure 6M0J covers RBD residues 333-526. Sites outside it
@@ -207,10 +228,11 @@ an 80% coverage threshold, analysed 40/40 at 100% coverage.
 mutation sets, one group containing 13 identical deposits. Listing them
 separately would overstate the number of findings.
 
-**3. A shared background destroys naive ranking.** 22 RBD mutations were present
-in *every* deposit — the Omicron-era inheritance. Ranking by each record's
-highest-scoring mutation tied all 11 variants at exactly 0.910 (R403K). Ranking
-by each deposit's *distinguishing* mutations instead produced real separation:
+**3. A shared background destroys naive ranking.** In that batch, 22 RBD
+mutations were present in *every* deposit — the Omicron-era inheritance. Ranking
+by each record's highest-scoring mutation tied all 11 variants at exactly 0.910
+(R403K). Ranking by each deposit's *distinguishing* mutations instead produced
+real separation:
 
 | Deposit | Top distinguishing mutation | Score | Distinguishing / total RBD |
 |---|---|---|---|
@@ -227,10 +249,12 @@ current backbone; retraining on an Omicron-era DMS dataset is the clear next ste
 
 ## What to claim, and what not to
 
-**Say:** "Our 4-qubit VQC reaches 0.672 AUC against a 0.5 chance baseline,
-trailing classical models (0.70–0.74) on identical features. Three ablations
-drove the design: feature count, circuit depth, and univariate-versus-contextual
-feature importance. All three contradicted the intuitive answer."
+**Say:** "Our 4-qubit VQC reaches 0.747 AUC against a 0.5 chance baseline,
+placing fourth of five — within 0.004 of the SVM and 0.033 behind logistic
+regression on identical features and an identical split. Three ablations drove
+the design: structure versus more chemistry, feature count, and the interaction
+between depth and width. All three contradicted the intuitive answer."
 
-**Do not say:** quantum advantage, outbreak prediction, or any accuracy figure as
-evidence of quality on this imbalanced dataset.
+**Do not say:** quantum advantage, outbreak prediction, any accuracy figure as
+evidence of quality on this imbalanced dataset, or any number for the ansatz
+choice — that ablation has not been run.

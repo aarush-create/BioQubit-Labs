@@ -11,12 +11,13 @@ limits reads as competent. Being caught overclaiming is very hard to recover fro
 in a live Q&A.
 
 **Your numbers, memorised:**
-- Surveillance: 40 deposits → 11 distinct variants · 22 mutations shared by all
+- Surveillance: ~40 deposits → ~14 distinct variants · ~11 mutations shared by all
+  (the feed refreshes itself, so read the live counts off the panel, not from memory)
 - Top distinguishing: L441I 0.871 · K444R 0.868 · K417N 0.849
 - VQE: max error 1.9e-7 Ha across the H₂ curve (chemical accuracy = 1.6e-3)
 - VQC held-out **AUC 0.747** · 4 qubits · 6 layers · 74 parameters
 - Baselines on identical features: **SVM 0.750 (we are within 0.004)** · MLP 0.766 · logistic 0.780
-- Biggest single gain: ACE2 interface distance from PDB 6M0J, +0.069 AUC
+- Biggest single gain: ACE2 interface distance from PDB 6M0J, +0.065 AUC (0.682 → 0.747)
 - Chance = 0.500 · majority-class accuracy = 0.684
 - Train 2,856 rows / 151 sites · Test 946 rows / 50 sites · site-grouped split
 
@@ -25,9 +26,9 @@ in a live Q&A.
 ## Quantum Relevance (20%)
 
 **"Where is the quantum advantage?"**
-> There isn't one, and we don't claim one. Our VQC reaches 0.747 AUC and the MLP
-> on the same features reaches 0.740 — we're behind, and it's on our results
-> slide. At 4 qubits the state is 16-dimensional and classically simulable. This
+> There isn't one, and we don't claim one. Our VQC reaches 0.747 AUC; on the same
+> features the SVM gets 0.750, the MLP 0.766 and logistic regression 0.780. We
+> place fourth of five, and it's on our results slide. At 4 qubits the state is 16-dimensional and classically simulable. This
 > is a feasibility study, and the value is in what the ablations taught us about
 > the circuit, not in beating sklearn.
 
@@ -39,27 +40,39 @@ cost you the room.
 > behaves sensibly, and that has to be settled at simulable size before anything
 > larger is worth attempting. We got three measured answers that generalise:
 > width should match feature count, depth hurts before it helps, and data
-> re-uploading matters a great deal.
+> width should match feature count, structure beats more chemistry, and depth
+> and width interact rather than acting independently.
 
 **"Walk me through your circuit."**
 > 4 qubits, one per feature. Each descriptor is angle-encoded as an RY rotation,
 > then `StronglyEntanglingLayers` applies parameterised rotations plus a ring of
 > CNOTs. The input is re-encoded before every layer — data re-uploading. We
 > measure ⟨Z⟩ on wire 0 and pass it through a trained sigmoid calibration.
-> 38 parameters total.
+> 6 layers, 74 parameters total.
 
-**"Why data re-uploading?"** *(a measurement, not an opinion)*
-> We benchmarked it. The single-encoding design scored 0.59 AUC; re-uploading
-> took the same qubits to 0.87. A single encoding followed by entangling layers
-> is provably limited in the functions it can express; re-uploading makes the
-> circuit a universal approximator (Pérez-Salinas et al. 2020).
+**"Why data re-uploading?"** *(say what you measured and what you didn't)*
+> We took it from the literature, not from our own ablation. A single encoding
+> followed by entangling layers is limited in the functions it can express;
+> re-uploading makes the circuit a universal approximator (Pérez-Salinas et al.
+> 2020). We have **not** run a controlled single-encoding comparison on this
+> dataset, so we don't quote a number for what it bought us. That ablation is on
+> the Round 2 list.
+
+*An earlier draft of our repo did quote a figure here. It wasn't reproducible
+from any committed script, so we withdrew it rather than defend it. If anyone
+has seen that number in an old version, say exactly this — it is a better
+answer than the number was.*
 
 **"Why not more qubits?"** ⭐ *your strongest answer*
 > We tested it. Angle encoding puts one feature per qubit, so qubits only help if
 > there's more information to carry. At the time our 4-feature model scored 0.672;
-> going to 8 features on 8 qubits DROPPED it to 0.640. We also doubled the depth at 8 qubits — 6 layers scored
-> 0.558 against 0.640 for 3 layers, and the deeper circuit never trained below
-> 0.556 loss. That's consistent with barren plateaus. Bigger made it worse, twice.
+> going to 8 features on 8 qubits DROPPED it to 0.640. We also doubled the depth
+> at 8 qubits — 6 layers scored 0.558 against 0.640 for 3 layers, and the deeper
+> circuit never trained below 0.556 loss. That's consistent with barren plateaus.
+> Note the interaction, because it's the interesting part: those same 6 layers
+> HELPED at 4 qubits, 0.672 to 0.682. Depth isn't good or bad on its own — a
+> wider circuit hits trainability problems at a depth a narrower one tolerates.
+> Bigger made it worse, twice, but only once we were already too wide.
 
 **"Does this run on real hardware?"**
 > Not yet — PennyLane `default.qubit`, with a `QVIRA_BACKEND` switch for Qiskit
@@ -132,6 +145,32 @@ cost you the room.
 > ~10⁵ qubits in a minimal basis, before error correction. Any demo claiming a
 > quantum-computed protein-ligand binding energy is doing something else.
 
+**"What happens if your AI copilot hits its rate limit while I'm watching?"** ⭐
+> It falls through. The copilot runs a provider chain — Gemini first, Grok second
+> — and any failure moves to the next one: a 429, a quota reset, a timeout, even
+> a model being renamed under us. Both providers get the identical system prompt
+> and the identical grounding context, so the answer doesn't change character
+> when it falls through, and the reply tells you which one served it. Either key
+> alone is enough to run.
+>
+> It's the one part of the app that depends on someone else's server, which is
+> exactly why it has a fallback and the rest of the app doesn't need one.
+
+**"Isn't an LLM in the loop just a way to fabricate numbers?"**
+> It would be, if it computed anything. It doesn't. Every figure it can quote is
+> passed in as context from the endpoints that computed it, and the system prompt
+> forbids inventing figures and tells it to say so when the answer isn't in the
+> context. Ask it something the run didn't measure and it will tell you it
+> doesn't have it — that's worth demonstrating live.
+
+**"What breaks if NCBI is down during your demo?"**
+> Nothing visible. The feed is served from memory and the refresh runs on a
+> worker thread, so a failed fetch leaves the previous payload on screen and
+> reports the error rather than blanking the panel. Same principle everywhere in
+> the demo path: the copilot has a second provider, the feed has its committed
+> cache, and `/predict` returns a 503 with an explanation rather than a
+> plausible-looking number.
+
 ---
 
 ## Originality (20%) and Impact (10%)
@@ -175,8 +214,9 @@ cost you the room.
 > It will return a score, because the features are generic residue chemistry —
 > but that score is out of distribution and unvalidated. We trained only on
 > SARS-CoV-2 RBD binding to human ACE2. Influenza binds sialic acid, Ebola binds
-> NPC1 — different locks entirely. And our relative_position feature learned
-> which RBD positions contact ACE2, which means nothing in another protein.
+> NPC1 — different locks entirely. And our `ace2_distance` feature is a literal
+> measurement from the SARS-CoV-2 RBD/ACE2 crystal structure, 6M0J — there is no
+> such distance in another protein.
 > The model cannot detect this itself: we verified it returns an *identical*
 > score for the same substitution on a SARS reference and an Ebola reference.
 > So the interface flags it instead. Pick Ebola in the dropdown and you'll see
@@ -184,26 +224,34 @@ cost you the room.
 
 **"Your reference is the full 1,273-residue spike but you trained on 201 residues. How do the coordinates line up?"** ⭐
 > Good question — we hit exactly that bug. The DMS data is indexed by spike site
-> 331–531, and `relative_position` is the position *within* that 201-residue
-> window. Our NCBI reference is the full-length spike, so a naive index would put
-> N501Y at 0.393 instead of 0.846 — same mutation, completely different feature
-> value, silently wrong scores. The API now maps spike coordinates back into the
-> trained window, and flags any substitution outside 331–531 as extrapolation.
+> 331–531, so every per-site feature is defined *within* that 201-residue window.
+> Our NCBI reference is the full-length spike, so a naive index would read site
+> 501 as 0.393 of the way through instead of 0.846 — same mutation, completely
+> different feature value, silently wrong scores. The API now maps spike
+> coordinates back into the trained window, and flags any substitution outside
+> 331–531 as extrapolation. The same frame is what lets `ace2_distance` look up
+> the right residue in 6M0J.
 
 **"Is the surveillance feed live?"** ⭐
-> No, and we say so on the panel. It is cached: NCBI is rate-limited and our
-> host's filesystem is ephemeral, so a live fetch on page load is a demo that
-> hangs. We build the cache with `python sentinel.py`, commit it, and display the
-> fetch timestamp. The pipeline behind it is real — we pull deposited SARS-CoV-2
-> spikes, align each against Wuhan-Hu-1, extract substitutions, keep the ones
-> inside sites 331–531, and score each with the trained VQC. Sequences with
-> indels have a different length, so we skip them and *report the count* rather
-> than dropping them quietly.
+> It refreshes itself, but a page load never waits on NCBI. The committed cache
+> is a seed; once the feed passes twelve hours old a background thread re-queries
+> NCBI and swaps the fresh result in, so the timestamp moves on its own. The
+> panel shows the real fetch time and how old it is — never a page-load time
+> dressed up as live. There's also a button that fires the fetch on demand.
+>
+> We built it that way because NCBI is rate-limited and our host's filesystem is
+> ephemeral: a synchronous fetch on page load is a demo that hangs in front of
+> you. The pipeline behind it is real — deposited SARS-CoV-2 spikes, aligned
+> against Wuhan-Hu-1, substitutions extracted, the ones inside sites 331–531
+> scored by the trained VQC. Sequences we can't align past 80% coverage are
+> skipped and the count is *reported*, not quietly dropped.
 
 **"How do you rank the surveillance feed?"** ⭐
 > Not by the highest-scoring mutation — we tried that and it ranked nothing.
-> 22 RBD mutations were present in every single deposit, the Omicron-era
-> inheritance, so all 11 distinct variants tied at exactly 0.910 on R403K. We now
+> In the batch where we found this, 22 RBD mutations were present in every single
+> deposit — the Omicron-era inheritance — so all 11 distinct variants tied at
+> exactly 0.910 on R403K. The exact counts move as the feed refreshes; the
+> confounder doesn't. We now
 > set aside the shared background and rank by each deposit's *distinguishing*
 > mutations. That produces real separation: L441I at 0.871, K444R at 0.868,
 > K417N at 0.849. The shared background is the signal's biggest confounder and
@@ -262,9 +310,10 @@ cost you the room.
 
 ## Showing the model card live
 
-The header has a **Results** button. It opens a model card served from
-`/metrics` — the same JSON the training run wrote, not typed by hand. It shows
-the VQC bar sitting BELOW three classical baselines, with a note saying so.
+The masthead shows the held-out AUC and opens a **model card** served from
+`/metrics` — the same JSON the training run wrote, not typed by hand. It draws
+every model as a ranked bar, with ours sitting fourth of five and a note saying
+so.
 
 Open it yourself, early, before anyone asks. Leading with "here is where our
 quantum model loses" buys more credibility than any number you could show, and
@@ -284,9 +333,9 @@ it pre-empts the single most dangerous question in the room.
 1. Problem — surveillance triage latency
 2. Architecture diagram
 3. **Why quantum** — expressivity per parameter, no advantage claimed
-4. The circuit — re-uploading, with the 0.59 → 0.87 measurement
+4. The circuit — 4 qubits, 6 layers, re-uploading ansatz (no number claimed for it)
 5. **Results** — VQC 0.747 beside all baselines, chance line marked
-6. **Ablations** — features 4 vs 8, depth 3 vs 6, the flat-loss failure
+6. **Ablations** — structure vs chemistry, features 4 vs 8, depth x width, the flat-loss failure
 7. VQE — H₂ vs exact diagonalisation, plus the scaling table
 8. Limitations and roadmap ← **do not cut this slide**
 

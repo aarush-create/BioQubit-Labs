@@ -45,10 +45,13 @@ def _circuit(features, weights):
     The input angles are re-encoded before EVERY entangling layer
     (Perez-Salinas et al. 2020, "Data re-uploading for a universal quantum
     classifier"). A single encoding followed by entangling layers -- the
-    original design -- is provably limited in the functions it can express;
-    on our own benchmark it scored 0.59 AUC against 0.87 for this version.
-    That measurement is the reason for the change, and it is a good thing to
-    be able to say in the jury Q&A.
+    original design -- is limited in the functions it can express; re-uploading
+    makes the circuit a universal approximator.
+
+    We took this from the literature. We have NOT run a controlled
+    single-encoding-versus-re-uploading ablation on this dataset, so no number
+    is claimed for it anywhere in the repo. See RESULTS.md, "What we did NOT
+    measure: the ansatz".
     """
     for layer in range(weights.shape[0]):
         qml.AngleEmbedding(features=features, wires=range(N_QUBITS), rotation="Y")

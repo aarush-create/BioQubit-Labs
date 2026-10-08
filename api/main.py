@@ -37,18 +37,20 @@ API_VERSION = "2.1.0"
 # Any other reference is OUT OF DISTRIBUTION: the features are generic protein
 # chemistry so a score will still be computed, but it is unvalidated. Different
 # viruses use different receptors (influenza -> sialic acid, Ebola -> NPC1), and
-# the relative_position feature learned which RBD positions contact ACE2, which
-# means nothing in another protein. We surface this rather than hide it.
+# the ace2_distance feature is a literal measurement from the SARS-CoV-2
+# RBD/ACE2 complex (PDB 6M0J) -- there is no such distance in another protein.
+# We surface this rather than hide it.
 VALIDATED_REFERENCE_KEYWORDS = ("sars-cov-2", "sars cov 2", "sars-cov2")
 VALIDATED_TARGET = "human ACE2 receptor binding"
 
 # CRITICAL: the model was trained on the RECEPTOR-BINDING DOMAIN only, sites
-# 331-531 in SARS-CoV-2 spike numbering (201 residues). The relative_position
-# feature is the position WITHIN that window, not within the full 1273-residue
-# spike. The reference sequences fetched from NCBI are full-length proteins, so
-# we must map positions back into the trained window or every score is wrong:
-# position 501 is 0.846 of the way through the RBD but only 0.393 of the way
-# through the spike. Same input, completely different feature value.
+# 331-531 in SARS-CoV-2 spike numbering (201 residues). Every per-site feature
+# is defined WITHIN that window, not within the full 1273-residue spike. The
+# reference sequences fetched from NCBI are full-length proteins, so we must map
+# positions back into the trained window or every score is wrong: site 501 is
+# 0.846 of the way through the RBD but only 0.393 of the way through the spike.
+# Same input, completely different feature value. The same frame is what lets
+# ace2_distance look up the right residue in 6M0J.
 TRAINED_DOMAIN = {"start": 331, "end": 531}   # inclusive, 1-indexed
 TRAINED_DOMAIN_LENGTH = TRAINED_DOMAIN["end"] - TRAINED_DOMAIN["start"] + 1
 
