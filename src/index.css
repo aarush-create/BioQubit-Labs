@@ -339,6 +339,21 @@ input[type='range'] { width: 100%; accent-color: var(--assay); padding: 0; borde
   .theme-toggle button { padding: 0.42rem 0.65rem; }
 }
 
+
+/* The caveats run the full width of the sheet rather than sitting in a narrow
+   column. Columns keep the measure readable at that width: one long line of
+   text across 74rem is harder to read, not easier. */
+.caveats {
+  margin: 0; padding-left: 1.15rem;
+  font-size: var(--t-sm); color: var(--ink-2); line-height: 1.6;
+  columns: 2; column-gap: 3rem;
+}
+.caveats li {
+  margin-bottom: 0.7rem;
+  break-inside: avoid;              /* never split a caveat across columns */
+}
+@media (max-width: 60rem) { .caveats { columns: 1; } }
+
 /* ----------------------------------------------------------------- misc */
 
 .hr { border: 0; border-top: 1px solid var(--rule); margin: 1.5rem 0; }

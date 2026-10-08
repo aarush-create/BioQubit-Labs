@@ -387,7 +387,8 @@ def build_payload(records: list[dict], skipped: list[dict], reference: str,
         "records": records,
         "skipped_records": skipped[:20],
         "caveats": [
-            "Cached, not live. The timestamp is when NCBI was last queried.",
+            "Served from memory, refreshed in the background. The timestamp is "
+            "when NCBI was actually queried, never when the page was loaded.",
             "The reference RBD is located in each record by local alignment "
             "(Smith-Waterman, BLOSUM62), so partial sequences and indels "
             "elsewhere in the spike are handled rather than rejected.",

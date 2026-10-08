@@ -780,8 +780,8 @@ export default function App() {
                     <p className="section-lede">
                       Every limit the pipeline knows about, surfaced rather than filtered away.
                     </p>
-                    <ul className="small" style={{ paddingLeft: '1.1rem', maxWidth: '72ch', margin: 0 }}>
-                      {sentinel.caveats.map((c, i) => <li key={i} style={{ marginBottom: '0.45rem' }}>{c}</li>)}
+                    <ul className="caveats">
+                      {sentinel.caveats.map((c, i) => <li key={i}>{c}</li>)}
                     </ul>
                   </section>
                 </>
