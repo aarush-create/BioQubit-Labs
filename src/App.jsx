@@ -113,6 +113,101 @@ const MoonIcon = () => (
   </svg>
 );
 
+
+/* The 20 residues, with the property class that actually drives binding.
+   Colouring by class is standard in sequence viewers (Clustal and friends) —
+   it is how a biologist reads a mutation at a glance, so it belongs here. */
+const RESIDUES = {
+  A: ['Alanine', 'hydrophobic'],    V: ['Valine', 'hydrophobic'],
+  L: ['Leucine', 'hydrophobic'],    I: ['Isoleucine', 'hydrophobic'],
+  M: ['Methionine', 'hydrophobic'], F: ['Phenylalanine', 'aromatic'],
+  W: ['Tryptophan', 'aromatic'],    Y: ['Tyrosine', 'aromatic'],
+  P: ['Proline', 'special'],        G: ['Glycine', 'special'],
+  C: ['Cysteine', 'special'],       S: ['Serine', 'polar'],
+  T: ['Threonine', 'polar'],        N: ['Asparagine', 'polar'],
+  Q: ['Glutamine', 'polar'],        D: ['Aspartate', 'acidic'],
+  E: ['Glutamate', 'acidic'],       K: ['Lysine', 'basic'],
+  R: ['Arginine', 'basic'],         H: ['Histidine', 'basic'],
+};
+
+/* "N501Y" -> { wt: 'N', pos: 501, mut: 'Y' } */
+function parseMutation(code) {
+  const m = /^([A-Z])(\d+)([A-Z])$/.exec(String(code || '').trim());
+  return m ? { wt: m[1], pos: parseInt(m[2], 10), mut: m[3] } : null;
+}
+
+const klass = (letter) => (RESIDUES[letter] || [null, 'polar'])[1];
+
+/* The substitution, shown the way a sequence viewer shows it: both residues in
+   their class colours, with what they actually are underneath. */
+function ResidueSwap({ code }) {
+  const p = parseMutation(code);
+  if (!p) return null;
+  const wtName = (RESIDUES[p.wt] || ['unknown'])[0];
+  const mutName = (RESIDUES[p.mut] || ['unknown'])[0];
+  return (
+    <div className="swap">
+      <div className={`swap-aa aa-${klass(p.wt)}`}>
+        <span className="swap-letter">{p.wt}</span>
+        <span className="swap-name">{wtName}</span>
+      </div>
+      <div className="swap-arrow" aria-hidden="true">
+        <span className="swap-site">site {p.pos}</span>
+      </div>
+      <div className={`swap-aa aa-${klass(p.mut)}`}>
+        <span className="swap-letter">{p.mut}</span>
+        <span className="swap-name">{mutName}</span>
+      </div>
+    </div>
+  );
+}
+
+/* A score that lands rather than appears. One orchestrated moment, not a page
+   full of them. */
+function CountUp({ value, decimals = 3 }) {
+  const [shown, setShown] = useState(value);
+  const from = useRef(value);
+  useEffect(() => {
+    const a = from.current, b = value, ms = 520;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setShown(b); from.current = b; return;
+    }
+    const start = performance.now();
+    let raf;
+    const tick = (t) => {
+      const k = Math.min(1, (t - start) / ms);
+      setShown(a + (b - a) * (1 - Math.pow(1 - k, 3)));
+      if (k < 1) raf = requestAnimationFrame(tick);
+      else from.current = b;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{shown.toFixed(decimals)}</>;
+}
+
+/* Reveals its children once, the first time they scroll into view. One
+   orchestrated moment per page, not an effect on every section. */
+function Reveal({ children, delay = 0 }) {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver !== 'function') { setShown(true); return; }
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { setShown(true); io.disconnect(); }
+    }, { threshold: 0.25 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div ref={ref} className={`reveal${shown ? ' is-in' : ''}`}
+         style={{ transitionDelay: `${delay}ms` }}>
+      {children}
+    </div>
+  );
+}
+
 function Bar({ value, flagged }) {
   const pct = Math.max(0, Math.min(1, Number(value) || 0)) * 100;
   return (
@@ -549,12 +644,47 @@ export default function App() {
 
       <main>
         {/* ------------------------------------------------------------ hero */}
-        <section className="shell hero">
-          <h1 className="hero-q">Which mutation should a lab test first?</h1>
-          <p className="hero-sub">
-            Q-VIRA scores one amino-acid substitution for whether the virus still binds human ACE2,
-            and puts the results in order so limited bench capacity goes to the right change first.
-          </p>
+        <section className="stage">
+          <div className="shell">
+            <p className="eyebrow">A 4-qubit variational classifier for variant triage</p>
+            <h1 className="stage-h1">Which mutation<br />should a lab test first?</h1>
+            <p className="stage-sub">
+              Labs deposit new coronavirus sequences every day. Characterising one takes two to six
+              weeks. Q-VIRA scores every substitution for whether the virus still binds human ACE2,
+              and puts them in order — so the bench time goes to the right change first.
+            </p>
+            <div className="stage-cta">
+              <button className="pill pill-solid" onClick={() => {
+                setActiveTab('genomics');
+                document.getElementById('instrument')?.scrollIntoView({ behavior: 'smooth' });
+              }}>Score a variant</button>
+              <button className="pill" onClick={() => {
+                setActiveTab('sentinel');
+                document.getElementById('instrument')?.scrollIntoView({ behavior: 'smooth' });
+              }}>See today's deposits</button>
+            </div>
+
+            <div className="figures">
+              {[
+                ['4,221', 'measured mutants', 'Starr et al. 2020, every one assayed for ACE2 binding'],
+                ['4', 'qubits', 'one descriptor per qubit, chosen by ablation'],
+                [metrics?.vqc?.roc_auc ? metrics.vqc.roc_auc.toFixed(3) : '0.747', 'held-out AUC',
+                 'fourth of five against classical baselines — we show the gap'],
+                ['201', 'residues', 'the receptor-binding domain, sites 331 to 531'],
+              ].map(([n, label, note], i) => (
+                <Reveal key={label} delay={i * 70}>
+                  <div className="figure-stat">
+                    <div className="figure-n">{n}</div>
+                    <div className="figure-l">{label}</div>
+                    <div className="figure-note">{note}</div>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="shell hero" id="instrument">
 
           <div className="readout">
             <div className="readout-top">
@@ -563,10 +693,11 @@ export default function App() {
                   <div>
                     <div className="readout-label">Binding score · {result.driver_mutation}</div>
                     <div className="readout-value">
-                      {result.threat_score.toFixed(3)}
+                      <CountUp value={result.threat_score} />
                       <span className="readout-err">± {result.threat_score_stderr.toFixed(3)}</span>
                     </div>
                   </div>
+                  <ResidueSwap code={result.driver_mutation} />
                   <div className="readout-meta">
                     {result.quantum.shots} shots · R₀ scenario {r0.toFixed(2)}
                     {seir && <> · peak day {seir.indicators.peak_day}</>}
@@ -575,11 +706,19 @@ export default function App() {
               ) : (
                 <div>
                   <div className="readout-label">Nothing scored yet</div>
-                  <p className="muted" style={{ maxWidth: '62ch', marginTop: '0.15rem', marginBottom: 0 }}>
-                    The ruler below is the window this model was trained on — 201 residues of the
-                    receptor-binding domain. Score a substitution and it appears at its real
-                    position, or read the ranked feed of today's deposits.
+                  <p className="muted" style={{ maxWidth: '58ch', marginTop: '0.15rem', marginBottom: '0.75rem' }}>
+                    The ruler below is the 201-residue window this model was trained on.
+                    Pick a famous substitution and see where it lands:
                   </p>
+                  <div className="try-row">
+                    {['N501Y', 'E484K', 'K417N', 'L452R'].map(code => (
+                      <button key={code} type="button" className="try"
+                              onClick={() => { setMutationInput(code); setActiveTab('genomics'); }}>
+                        <span className={`try-dot aa-${klass(parseMutation(code).mut)}`} />
+                        {code}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -727,6 +866,7 @@ export default function App() {
                                         ? 'Outside the 6M0J crystal structure — the distance is a far-field fallback, not a measurement'
                                         : undefined}
                                       className={`chip${unique ? ' is-unique' : ''}${m.has_structure === false ? ' no-structure' : ''}`}>
+                                  <span className={`chip-dot aa-${klass((parseMutation(m.mutation) || {}).mut)}`} />
                                   {m.mutation}{m.has_structure === false && '*'}
                                   <span className="s">{m.score.toFixed(2)}</span>
                                 </span>

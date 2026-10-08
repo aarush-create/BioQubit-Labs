@@ -41,6 +41,15 @@
   --ok:         #1f6350;
 
   --shade:      6, 14, 20;
+
+  /* Residue classes. Muted enough to sit beside the assay accent without
+     competing with it, distinct enough to read at 13px. */
+  --aa-hydrophobic: #9a6a16;
+  --aa-aromatic:    #7b4ea8;
+  --aa-polar:       #1f7a6a;
+  --aa-acidic:      #b1453c;
+  --aa-basic:       #2a5fa8;
+  --aa-special:     #6c7079;
 }
 
 :root[data-theme='dark'] {
@@ -63,6 +72,13 @@
   --ok:         #58c7a4;
 
   --shade:      0, 4, 8;
+
+  --aa-hydrophobic: #e0b25c;
+  --aa-aromatic:    #c3a0ee;
+  --aa-polar:       #58ccb4;
+  --aa-acidic:      #f08a80;
+  --aa-basic:       #83b2f5;
+  --aa-special:     #9aa5b0;
 }
 
 :root {
@@ -353,6 +369,133 @@ input[type='range'] { width: 100%; accent-color: var(--assay); padding: 0; borde
   break-inside: avoid;              /* never split a caveat across columns */
 }
 @media (max-width: 60rem) { .caveats { columns: 1; } }
+
+
+
+/* ================================================================= stage */
+/* The front door. The app behind it is dense on purpose; this is the one
+   place with room to breathe, so it gets Apple-scale type and air rather
+   than another panel of instrumentation. */
+
+.stage { padding: 5.5rem 0 4.5rem; text-align: center; }
+@media (min-width: 60rem) { .stage { padding: 7.5rem 0 6rem; } }
+
+.eyebrow {
+  font-size: var(--t-sm); color: var(--assay); font-weight: 500;
+  margin: 0 0 1.1rem; max-width: none;
+}
+
+.stage-h1 {
+  font-size: clamp(2.5rem, 6.4vw, 4.75rem);
+  font-weight: 700; letter-spacing: -0.045em; line-height: 1.03;
+  margin: 0 auto 1.4rem; max-width: 18ch;
+}
+
+.stage-sub {
+  font-size: clamp(1.0625rem, 1.6vw, 1.3125rem);
+  color: var(--ink-2); line-height: 1.5;
+  margin: 0 auto 2.25rem; max-width: 56ch;
+}
+
+.stage-cta { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; }
+
+.pill {
+  appearance: none; cursor: pointer; font: inherit;
+  font-size: var(--t-base); font-weight: 600; letter-spacing: -0.01em;
+  padding: 0.75rem 1.6rem; border-radius: 999px;
+  border: 1px solid var(--rule); background: transparent; color: var(--ink);
+  transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+.pill:hover { border-color: var(--ink); transform: translateY(-1px); }
+.pill:active { transform: translateY(0); }
+.pill-solid { background: var(--assay); border-color: var(--assay); color: var(--paper); }
+.pill-solid:hover { background: var(--ink); border-color: var(--ink); }
+:root[data-theme='dark'] .pill-solid { color: #06131a; }
+@media (prefers-reduced-motion: reduce) { .pill { transition: none; } }
+
+/* four numbers, large enough to read from the back of a room */
+.figures {
+  display: grid; gap: 2.5rem 1.5rem; margin-top: 4.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 56rem) { .figures { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.figure-n {
+  font-family: var(--mono); font-weight: 500;
+  font-size: clamp(2.25rem, 4.4vw, 3.5rem);
+  letter-spacing: -0.04em; line-height: 1; color: var(--assay);
+}
+.figure-l { font-size: var(--t-base); font-weight: 600; margin-top: 0.55rem; }
+.figure-note {
+  font-size: var(--t-xs); color: var(--ink-2); margin: 0.3rem auto 0;
+  max-width: 24ch; line-height: 1.5;
+}
+
+/* the single reveal */
+.reveal {
+  opacity: 0; transform: translateY(14px);
+  transition: opacity 620ms cubic-bezier(.2,.7,.3,1), transform 620ms cubic-bezier(.2,.7,.3,1);
+}
+.reveal.is-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* the instrument below keeps its own, tighter rhythm */
+.hero { padding-top: 1rem; border-top: 1px solid var(--rule); }
+.hero .hero-q { font-size: var(--t-xl); max-width: 26ch; }
+
+/* ------------------------------------------------------- the substitution */
+/* A mutation is two residues and a position. Showing it as two letters in
+   their biochemical class colours is how a sequence viewer would show it —
+   and it reads instantly, which a code like "N501Y" does not. */
+
+.aa-hydrophobic { --aa: var(--aa-hydrophobic); }
+.aa-aromatic    { --aa: var(--aa-aromatic); }
+.aa-polar       { --aa: var(--aa-polar); }
+.aa-acidic      { --aa: var(--aa-acidic); }
+.aa-basic       { --aa: var(--aa-basic); }
+.aa-special     { --aa: var(--aa-special); }
+
+.swap { display: flex; align-items: center; gap: 0.85rem; }
+.swap-aa { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.swap-letter {
+  display: grid; place-items: center;
+  width: 2.6rem; height: 2.6rem; border-radius: var(--radius);
+  font-family: var(--mono); font-size: 1.5rem; font-weight: 500;
+  color: var(--aa); border: 2px solid var(--aa);
+  background: color-mix(in srgb, var(--aa) 12%, transparent);
+  animation: pop 320ms cubic-bezier(.2,.9,.3,1.3) both;
+}
+.swap-aa:last-child .swap-letter { animation-delay: 110ms; }
+.swap-name { font-size: var(--t-xs); color: var(--ink-2); }
+.swap-arrow { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+.swap-arrow::before {
+  content: '→'; font-size: 1.1rem; color: var(--ink-3); line-height: 1;
+}
+.swap-site { font-family: var(--mono); font-size: var(--t-xs); color: var(--ink-3); }
+
+@keyframes pop { from { transform: scale(.72); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .swap-letter { animation: none; } }
+
+/* a coloured pip on each mutation chip, so the feed reads as chemistry */
+.chip-dot, .try-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--aa); margin-right: 0.4rem; vertical-align: 0.05em;
+}
+
+/* ------------------------------------------------------ try-one-of-these */
+.try-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.try {
+  appearance: none; cursor: pointer; font: inherit;
+  font-family: var(--mono); font-size: var(--t-sm);
+  padding: 0.35rem 0.7rem; border-radius: 999px;
+  border: 1px solid var(--rule); background: var(--sheet); color: var(--ink);
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+.try:hover { border-color: var(--assay); transform: translateY(-1px); }
+.try:active { transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) { .try { transition: none; } }
 
 /* ----------------------------------------------------------------- misc */
 
