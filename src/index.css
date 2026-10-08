@@ -15,39 +15,75 @@
    for genuine failure so it still means something when it shows up.
    ========================================================================= */
 
+/* Two readings of the same bench. Light is paper under fluorescent light;
+   dark is the same instrument at night, with the Coomassie accent lifted so it
+   still reads as "measured" against a dark field. Every token below has a
+   counterpart, so nothing in the app needs to know which theme is on. */
+
+:root,
+:root[data-theme='light'] {
+  --zebra:      rgba(12, 28, 40, 0.035);
+  --paper:      #e0e7ec;
+  --sheet:      #fbfcfd;
+  --sheet-sunk: #ccd6de;
+  --ink:        #0e1419;
+  --ink-2:      #3c4953;
+  --ink-3:      #5f6c77;
+  --rule:       #a7b4bf;
+  --rule-soft:  #c5d0d8;
+
+  --assay:      #0d5f7c;   /* measured values — the one accent */
+  --assay-soft: #cfe3ea;
+  --flag:       #8a5410;   /* read this carefully — warm, so it stands out */
+  --flag-soft:  #f0e3cc;
+  --alarm:      #8d2b2c;   /* something is actually broken */
+  --alarm-soft: #f4dddd;
+  --ok:         #1f6350;
+
+  --shade:      6, 14, 20;
+}
+
+:root[data-theme='dark'] {
+  --zebra:      rgba(255, 255, 255, 0.022);
+  --paper:      #0a1015;
+  --sheet:      #18242d;
+  --sheet-sunk: #060a0e;
+  --ink:        #e9f0f4;
+  --ink-2:      #adbdc7;
+  --ink-3:      #81929d;
+  --rule:       #324249;
+  --rule-soft:  #222e36;
+
+  --assay:      #5fd0e8;
+  --assay-soft: #11313d;
+  --flag:       #e0ae53;
+  --flag-soft:  #2e2512;
+  --alarm:      #ef7f72;
+  --alarm-soft: #371b1b;
+  --ok:         #58c7a4;
+
+  --shade:      0, 4, 8;
+}
+
 :root {
-  --paper:      #e8ebe4;
-  --sheet:      #f6f7f3;
-  --sheet-sunk: #e1e5dc;
-  --ink:        #15191a;
-  --ink-2:      #58615d;
-  --ink-3:      #868e89;
-  --rule:       #c4cabf;
-  --rule-soft:  #d7dcd2;
-
-  --assay:      #1b4d5a;   /* measured values — the one accent */
-  --assay-soft: #d8e4e5;
-  --flag:       #8a5a12;   /* read this carefully */
-  --flag-soft:  #f1e7d4;
-  --alarm:      #8e2f2a;   /* something is actually broken */
-  --alarm-soft: #f3dedc;
-  --ok:         #2f6b43;
-
   --sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  /* 1.333 scale */
-  --t-xs:   0.6875rem;
-  --t-sm:   0.8125rem;
-  --t-base: 0.9375rem;
-  --t-md:   1.125rem;
-  --t-lg:   1.5rem;
-  --t-xl:   2rem;
-  --t-2xl:  2.75rem;
+  /* 1.333 scale, nudged up a step for reading at arm's length */
+  --t-xs:   0.8125rem;    /* 13   */
+  --t-sm:   0.9375rem;    /* 15   */
+  --t-base: 1.0625rem;    /* 17   */
+  --t-md:   1.375rem;     /* 22   */
+  --t-lg:   1.875rem;     /* 30   */
+  --t-xl:   2.25rem;      /* 36   */
+  --t-2xl:  3rem;         /* 48   */
 
   --gut: 1.5rem;
   --radius: 2px;
+
+  color-scheme: light;
 }
+:root[data-theme='dark'] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -59,7 +95,7 @@ body {
   color: var(--ink);
   font-family: var(--sans);
   font-size: var(--t-base);
-  line-height: 1.55;
+  line-height: 1.62;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
@@ -68,14 +104,15 @@ body {
 
 h1, h2, h3, h4 {
   font-family: var(--sans);
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1.15;
   margin: 0;
+  color: var(--ink);
   text-wrap: balance;
 }
 
-p { margin: 0 0 0.75em; max-width: 68ch; }
+p { margin: 0 0 0.8em; max-width: 70ch; }
 p:last-child { margin-bottom: 0; }
 a { color: var(--assay); text-underline-offset: 2px; }
 code, .mono, .num { font-family: var(--mono); font-feature-settings: 'zero' 1; }
@@ -87,14 +124,13 @@ b, strong { font-weight: 600; }
 
 .masthead {
   position: sticky; top: 0; z-index: 40;
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--paper);
   border-bottom: 1px solid var(--rule);
 }
 .masthead-in { display: flex; align-items: baseline; gap: 0.9rem; padding: 0.8rem 0; flex-wrap: wrap; }
-.wordmark { font-size: var(--t-md); font-weight: 700; letter-spacing: -0.03em; }
+.wordmark { font-size: var(--t-md); font-weight: 700; letter-spacing: -0.035em; color: var(--ink); }
 .wordmark span { color: var(--assay); }
-.masthead-sub { font-size: var(--t-xs); color: var(--ink-2); }
+.masthead-sub { font-size: var(--t-sm); color: var(--ink-2); }
 .masthead-right { margin-left: auto; display: flex; align-items: baseline; gap: 1.1rem; flex-wrap: wrap; }
 
 /* ------------------------------------------------------------------ hero */
@@ -117,7 +153,7 @@ b, strong { font-weight: 600; }
 .readout-meta { font-size: var(--t-xs); color: var(--ink-2); font-family: var(--mono); text-align: right; }
 
 /* a position ruler across the trained domain, with each substitution marked */
-.ruler { position: relative; height: 56px; margin-top: 1.25rem; }
+.ruler { position: relative; height: 56px; margin-top: 1.4rem; }
 .ruler-line { position: absolute; left: 0; right: 0; top: 30px; height: 1px; background: var(--rule); }
 .ruler-tick { position: absolute; top: 25px; width: 1px; height: 11px; background: var(--rule); }
 .ruler-end { position: absolute; top: 40px; font-family: var(--mono); font-size: var(--t-xs); color: var(--ink-3); }
@@ -144,28 +180,36 @@ b, strong { font-weight: 600; }
 
 /* ------------------------------------------------------------------ tabs */
 
-.rail { display: flex; gap: 1.6rem; border-bottom: 1px solid var(--rule); overflow-x: auto; scrollbar-width: none; }
+.rail {
+  display: flex; gap: 2rem; border-bottom: 2px solid var(--rule);
+  overflow-x: auto; scrollbar-width: none;
+}
 .rail::-webkit-scrollbar { display: none; }
 .rail button {
   appearance: none; background: none; border: 0; cursor: pointer; font: inherit;
-  font-size: var(--t-sm); color: var(--ink-2); padding: 0.75rem 0; white-space: nowrap;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  font-size: var(--t-base); font-weight: 500; color: var(--ink-2);
+  padding: 0.85rem 0; white-space: nowrap;
+  border-bottom: 3px solid transparent; margin-bottom: -2px;
+  letter-spacing: -0.01em;
 }
 .rail button:hover { color: var(--ink); }
-.rail button[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--assay); font-weight: 600; }
+.rail button[aria-selected='true'] {
+  color: var(--ink); border-bottom-color: var(--assay); font-weight: 700;
+}
 
 /* ---------------------------------------------------------------- panels */
 
 .panel { padding: 2rem 0 3.5rem; }
 .panel-head { margin-bottom: 1.5rem; }
-.panel-head h2 { font-size: var(--t-lg); margin-bottom: 0.3rem; }
-.panel-head .lede { color: var(--ink-2); font-size: var(--t-sm); max-width: 72ch; }
+.panel-head h2 { font-size: var(--t-lg); margin-bottom: 0.45rem; }
+.panel-head .lede { color: var(--ink-2); font-size: var(--t-base); max-width: 70ch; }
 
-.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1.25rem; }
+.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1.35rem; }
 .sheet-sunk { background: var(--sheet-sunk); border: 1px solid var(--rule-soft); border-radius: var(--radius); padding: 1rem; }
 
 /* a note set as a hanging rule, like a footnote, rather than boxed in */
-.note { border-left: 2px solid var(--rule); padding-left: 0.9rem; font-size: var(--t-sm); color: var(--ink-2); max-width: 72ch; }
+.note { border-left: 3px solid var(--rule); padding-left: 1rem; font-size: var(--t-sm);
+        color: var(--ink-2); max-width: 72ch; line-height: 1.6; }
 .note b { color: var(--ink); }
 .note.is-flag { border-left-color: var(--flag); }
 .note.is-flag b { color: var(--flag); }
@@ -175,15 +219,21 @@ b, strong { font-weight: 600; }
 /* key/value pairs read as a definition list, not a row of little cards */
 .facts { display: flex; flex-wrap: wrap; gap: 0 2.25rem; margin: 0; }
 .facts > div { padding: 0.45rem 0; }
-.facts dt { font-size: var(--t-xs); color: var(--ink-2); }
-.facts dd { margin: 0; font-family: var(--mono); font-size: var(--t-sm); }
+.facts dt { font-size: var(--t-xs); color: var(--ink-2); margin-bottom: 0.1rem; }
+.facts dd { margin: 0; font-family: var(--mono); font-size: var(--t-sm); color: var(--ink); }
 
 /* ------------------------------------------------------------------ lane */
 /* The feed. Each deposit is a ruled lane: accession, what distinguishes it,
    and the measured score drawn as a bar. */
 
-.lanes { border-top: 1px solid var(--ink); }
-.lane { display: grid; gap: 0.3rem 1.25rem; padding: 0.95rem 0; border-bottom: 1px solid var(--rule-soft); grid-template-columns: minmax(0, 1fr); }
+.lanes { border-top: 2px solid var(--ink); }
+.lane {
+  display: grid; gap: 0.3rem 1.25rem; padding: 1rem 0.85rem;
+  border-bottom: 1px solid var(--rule-soft);
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 -0.85rem;              /* stripe bleeds past the text column */
+}
+.lane:nth-child(odd) { background: var(--zebra); }
 @media (min-width: 46rem) { .lane { grid-template-columns: 10.5rem minmax(0, 1fr) 13rem; align-items: start; } }
 .lane-acc { font-family: var(--mono); font-size: var(--t-sm); }
 .lane-desc { font-size: var(--t-xs); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -205,7 +255,7 @@ b, strong { font-weight: 600; }
 
 /* ---------------------------------------------------------------- inputs */
 
-label.field { display: block; font-size: var(--t-sm); color: var(--ink-2); margin-bottom: 0.3rem; }
+label.field { display: block; font-size: var(--t-sm); font-weight: 500; color: var(--ink); margin-bottom: 0.35rem; }
 input[type='text'], select, textarea {
   width: 100%; font: inherit; font-size: var(--t-sm);
   background: var(--sheet); color: var(--ink);
@@ -229,11 +279,71 @@ input[type='range'] { width: 100%; accent-color: var(--assay); padding: 0; borde
 .btn-ghost[aria-pressed='true'] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .btn-sm { padding: 0.3rem 0.65rem; font-size: var(--t-xs); font-weight: 500; }
 
+
+/* ----------------------------------------------------------- divisions */
+/* A panel is a worksheet with named regions. The rule running off the end of
+   each heading is the division marker — it says "a new region starts here"
+   and shows how far it extends, which a bare bold line would not. */
+
+.section { margin-top: 3rem; padding-top: 0.25rem; }
+.section:first-child { margin-top: 0.5rem; }
+.section > h3 {
+  display: flex; align-items: center; gap: 0.85rem;
+  font-size: var(--t-md); font-weight: 700; color: var(--ink);
+  margin-bottom: 1.15rem;
+}
+/* The square is the field mark: it says a named region of the worksheet starts
+   here. The rule then shows how far that region runs. */
+.section > h3::before {
+  content: ''; width: 9px; height: 9px; flex: none;
+  background: var(--assay); border-radius: 1px;
+}
+.section > h3::after {
+  content: ''; flex: 1; height: 2px; background: var(--rule);
+}
+.section-lede {
+  color: var(--ink-2); font-size: var(--t-sm); max-width: 70ch;
+  margin: -0.4rem 0 1rem;
+}
+
+/* a quieter divider for use inside a section */
+.divide { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0; }
+.divide::before, .divide::after { content: ''; flex: 1; height: 1px; background: var(--rule-soft); }
+.divide > span { font-size: var(--t-xs); color: var(--ink-3); font-family: var(--mono); }
+
+/* ------------------------------------------------------- theme toggle */
+/* Deliberately the loudest control in the masthead. A theme switch that nobody
+   finds is the same as not having one. */
+
+.theme-toggle {
+  display: inline-flex; align-items: stretch;
+  border: 2px solid var(--ink); border-radius: var(--radius);
+  overflow: hidden; background: var(--sheet);
+}
+.theme-toggle button {
+  appearance: none; border: 0; cursor: pointer; font: inherit;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.01em;
+  padding: 0.42rem 0.8rem; background: transparent; color: var(--ink-2);
+  line-height: 1.3;
+}
+.theme-toggle button + button { border-left: 1px solid var(--rule); }
+.theme-toggle button:hover { color: var(--ink); background: var(--sheet-sunk); }
+.theme-toggle button[aria-pressed='true'] {
+  background: var(--ink); color: var(--paper); border-left-color: var(--ink);
+}
+.theme-toggle svg { width: 15px; height: 15px; flex: none; }
+
+@media (max-width: 40rem) {
+  .theme-toggle button span { display: none; }   /* icons only on a phone */
+  .theme-toggle button { padding: 0.42rem 0.65rem; }
+}
+
 /* ----------------------------------------------------------------- misc */
 
 .hr { border: 0; border-top: 1px solid var(--rule); margin: 1.5rem 0; }
 .muted { color: var(--ink-2); }
-.small { font-size: var(--t-xs); color: var(--ink-2); }
+.small { font-size: var(--t-xs); color: var(--ink-2); line-height: 1.55; }
 .stack > * + * { margin-top: 1rem; }
 .stack-sm > * + * { margin-top: 0.5rem; }
 .cols { display: grid; gap: 2rem; }
@@ -242,14 +352,14 @@ input[type='range'] { width: 100%; accent-color: var(--assay); padding: 0; borde
 details > summary { cursor: pointer; font-size: var(--t-sm); color: var(--ink-2); }
 details > summary:hover { color: var(--ink); }
 
-.figure { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1rem; }
+.figure { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 1.1rem; }
 .figure-cap { font-size: var(--t-xs); color: var(--ink-2); margin-top: 0.6rem; }
 
 /* --------------------------------------------------------------- overlay */
 
 .overlay {
   position: fixed; inset: 0; z-index: 100;
-  background: color-mix(in srgb, var(--ink) 58%, transparent);
+  background: rgba(var(--shade), 0.62);
   display: flex; align-items: center; justify-content: center; padding: 1.25rem;
 }
 .dialog {
@@ -276,6 +386,11 @@ details > summary:hover { color: var(--ink); }
 .custom-scrollbar::-webkit-scrollbar { width: 8px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: var(--sheet-sunk); }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 4px; }
+
+/* The viewer's canvas colour is set through iCn3D's own URL parameter (see
+   viewerSrc in App.jsx), never with a CSS filter — a filter would recolour the
+   molecule too, and iCn3D colours chains and residues to mean something. */
+.viewer-shell { background: var(--sheet-sunk); }
 
 /* ----------------------------------------------------------------- print */
 

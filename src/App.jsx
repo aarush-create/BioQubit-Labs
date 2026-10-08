@@ -5,19 +5,32 @@ import {
   AreaChart, Area
 } from 'recharts';
 
-/* Palette, shared with index.css. Recharts needs real values, not CSS vars. */
-const C = {
-  ink: '#15191a', ink2: '#58615d', ink3: '#868e89',
-  rule: '#c4cabf', sheet: '#f6f7f3', paper: '#e8ebe4',
-  assay: '#1b4d5a', assaySoft: '#d8e4e5',
-  flag: '#8a5a12', alarm: '#8e2f2a', ok: '#2f6b43',
+/* Chart colours. Recharts needs literal values, not CSS vars, so the two
+   themes are mirrored here from index.css and picked at render time. */
+const PALETTES = {
+  light: {
+    ink: '#121617', ink2: '#4d5652', ink3: '#727b76',
+    rule: '#bcc3b7', sheet: '#f6f7f3', paper: '#e8ebe4',
+    assay: '#194955', flag: '#7e510e', alarm: '#8a2d28', ok: '#2a6340',
+  },
+  dark: {
+    ink: '#e7ece9', ink2: '#9eaaa6', ink3: '#76827e',
+    rule: '#2d373c', sheet: '#192026', paper: '#11161a',
+    assay: '#74c6d8', flag: '#dca94c', alarm: '#e8786d', ok: '#67bd87',
+  },
 };
 
-const axis = { stroke: C.rule, tick: { fill: C.ink2, fontSize: 11 } };
-const tipStyle = {
-  background: C.paper, border: `1px solid ${C.ink}`, borderRadius: 2,
-  fontSize: 12, color: C.ink, fontFamily: 'IBM Plex Mono, monospace',
-};
+/* Honour the operating system on a first visit, remember the choice after.
+   A judge opening this on a dark laptop should not get a white flash. */
+const THEME_KEY = 'qvira-theme';
+function initialTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch { /* private mode, or storage blocked */ }
+  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark' : 'light';
+}
 
 /* Backend base URL. Set VITE_API_URL in Vercel (Project > Settings >
    Environment Variables) to the Render URL. Never hardcode it: an early build
@@ -25,6 +38,14 @@ const tipStyle = {
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const DOMAIN = { start: 331, end: 531 };
+
+/* iCn3D renders on a white canvas. In dark mode we ask IT for a dark canvas
+   rather than filtering the iframe: a CSS filter would also recolour the
+   molecule, and iCn3D colours chains and residues to mean something. */
+const viewerSrc = (pdb, theme, full) =>
+  `https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdb || '6m0j'}`
+  + `&showcommand=0${full ? '' : '&showmenu=0'}&showtitle=0`
+  + (theme === 'dark' ? '&bkgdcolor=black' : '');
 
 /* The backend's keys are snake_case identifiers; these are what a reader
    should see on the model card. */
@@ -77,6 +98,21 @@ function DomainRuler({ mutations }) {
   );
 }
 
+const SunIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+       strokeLinecap="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="4.2" />
+    <path d="M12 2v2.6M12 19.4V22M22 12h-2.6M4.6 12H2M19.07 4.93l-1.84 1.84M6.77 17.23l-1.84 1.84M19.07 19.07l-1.84-1.84M6.77 6.77L4.93 4.93" />
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20.5 14.3A8.5 8.5 0 0 1 9.7 3.5a8.5 8.5 0 1 0 10.8 10.8z" />
+  </svg>
+);
+
 function Bar({ value, flagged }) {
   const pct = Math.max(0, Math.min(1, Number(value) || 0)) * 100;
   return (
@@ -87,6 +123,19 @@ function Bar({ value, flagged }) {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(initialTheme);
+  const C = PALETTES[theme];
+  const axis = { stroke: C.rule, tick: { fill: C.ink2, fontSize: 12 } };
+  const tipStyle = {
+    background: C.paper, border: `1px solid ${C.ink}`, borderRadius: 2,
+    fontSize: 12, color: C.ink, fontFamily: 'IBM Plex Mono, monospace',
+  };
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* storage blocked */ }
+  }, [theme]);
+
   const [activeTab, setActiveTab] = useState('sentinel');
   const [loading, setLoading] = useState(false);
   const [threatScore, setThreatScore] = useState(0.45);
@@ -386,9 +435,10 @@ export default function App() {
                       onClick={() => setStructureFullscreen(false)}>Close</button>
             </div>
             <iframe
-              key={`fs-${pdbInput}`}
-              src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showtitle=0`}
-              style={{ flex: 1, width: '100%', border: 0 }} title="Protein structure, full screen"
+              key={`fs-${pdbInput}-${theme}`}
+              src={viewerSrc(pdbInput, theme, true)}
+              style={{ flex: 1, width: '100%', border: 0 }}
+              title="Protein structure, full screen"
             />
           </div>
         </div>
@@ -476,6 +526,13 @@ export default function App() {
           <div className="wordmark">Q<span>·</span>VIRA</div>
           <div className="masthead-sub">BioQubit Labs</div>
           <div className="masthead-right">
+            <div className="theme-toggle" role="group" aria-label="Colour theme">
+              <button type="button" aria-pressed={theme === 'light'} title="Light theme"
+                      onClick={() => setTheme('light')}><SunIcon /><span>Light</span></button>
+              <button type="button" aria-pressed={theme === 'dark'} title="Dark theme"
+                      onClick={() => setTheme('dark')}><MoonIcon /><span>Dark</span></button>
+            </div>
+
             {metrics?.vqc?.roc_auc && (
               <button className="btn btn-ghost btn-sm" onClick={() => setShowMetrics(true)}>
                 Held-out AUC {metrics.vqc.roc_auc.toFixed(3)} · model card
@@ -518,7 +575,7 @@ export default function App() {
               ) : (
                 <div>
                   <div className="readout-label">Nothing scored yet</div>
-                  <p style={{ maxWidth: '54ch', marginTop: '0.15rem' }}>
+                  <p className="muted" style={{ maxWidth: '62ch', marginTop: '0.15rem', marginBottom: 0 }}>
                     The ruler below is the window this model was trained on — 201 residues of the
                     receptor-binding domain. Score a substitution and it appears at its real
                     position, or read the ranked feed of today's deposits.
@@ -580,18 +637,27 @@ export default function App() {
                 </p>
               </div>
 
-              <p className="note" style={{ marginBottom: '1.5rem' }}>
-                Nearly every circulating virus already carries the same ~30 changes inherited from
-                Omicron, so those say nothing about which sample is new. Lanes are ranked by the
-                substitutions <b>unique to each deposit</b>, shown in colour below; shared ones stay
-                grey. <b>Read it as a worklist, not a verdict</b> — a high score means a lab should
-                look sooner, not that a variant is dangerous or will spread.
-              </p>
+              <section className="section">
+                <h3>How to read this</h3>
+                <p className="note">
+                  Nearly every circulating virus already carries the same ~30 changes inherited from
+                  Omicron, so those say nothing about which sample is new. Lanes are ranked by the
+                  substitutions <b>unique to each deposit</b>, shown in colour below; shared ones stay
+                  grey. <b>Read it as a worklist, not a verdict</b> — a high score means a lab should
+                  look sooner, not that a variant is dangerous or will spread.
+                </p>
+              </section>
 
-              {sentinelError && <p className="note is-alarm"><b>No feed.</b> {sentinelError}</p>}
+              {sentinelError && (
+                <section className="section">
+                  <p className="note is-alarm"><b>No feed.</b> {sentinelError}</p>
+                </section>
+              )}
 
               {sentinel && (
                 <>
+                  <section className="section">
+                  <h3>This fetch</h3>
                   <dl className="facts">
                     <div>
                       <dt>Fetched</dt>
@@ -623,11 +689,14 @@ export default function App() {
                   </div>
 
                   {feedStatus?.last_error && (
-                    <p className="note is-flag" style={{ marginBottom: '1rem' }}>
+                    <p className="note is-flag">
                       <b>The last refresh failed.</b> {feedStatus.last_error} — showing the previous feed.
                     </p>
                   )}
+                  </section>
 
+                  <section className="section">
+                  <h3>Ranked deposits</h3>
                   <p className="note is-flag" style={{ marginBottom: '1.25rem' }}>
                     <b>Why some lanes are flagged.</b> The model was trained on <i>single</i> mutants
                     of Wuhan-Hu-1. A deposit carrying tens of co-occurring RBD substitutions is scored
@@ -704,12 +773,17 @@ export default function App() {
                     </p>
                   )}
 
-                  <details style={{ marginTop: '1.25rem' }}>
-                    <summary>Caveats ({sentinel.caveats.length})</summary>
-                    <ul className="small" style={{ marginTop: '0.6rem', paddingLeft: '1.1rem', maxWidth: '72ch' }}>
-                      {sentinel.caveats.map((c, i) => <li key={i} style={{ marginBottom: '0.3rem' }}>{c}</li>)}
+                  </section>
+
+                  <section className="section">
+                    <h3>Caveats</h3>
+                    <p className="section-lede">
+                      Every limit the pipeline knows about, surfaced rather than filtered away.
+                    </p>
+                    <ul className="small" style={{ paddingLeft: '1.1rem', maxWidth: '72ch', margin: 0 }}>
+                      {sentinel.caveats.map((c, i) => <li key={i} style={{ marginBottom: '0.45rem' }}>{c}</li>)}
                     </ul>
-                  </details>
+                  </section>
                 </>
               )}
             </section>
@@ -728,7 +802,10 @@ export default function App() {
               </div>
 
               <div className="cols cols-2">
-                <div className="stack">
+                <div>
+                  <section className="section">
+                  <h3>Input</h3>
+                  <div className="stack">
                   <div>
                     <label className="field" htmlFor="ref">Reference sequence</label>
                     <select id="ref" value={refName} onChange={e => setRefName(e.target.value)}>
@@ -775,13 +852,18 @@ export default function App() {
                     it. Pasting a raw FASTA would not tell it which positions changed. The reference
                     sequences are fetched from NCBI by the backend.
                   </p>
+                  </div>
+                  </section>
                 </div>
 
-                <div className="stack" style={{ minWidth: 0 }}>
+                <div style={{ minWidth: 0 }}>
+                  <section className="section">
+                  <h3>What the circuit reads</h3>
+                  <p className="section-lede">
+                    One descriptor per qubit, normalised to the clamp ranges in the featuriser.
+                    Chosen by ablation: eight descriptors scored worse than these four.
+                  </p>
                   <div className="figure">
-                    <div style={{ fontSize: 'var(--t-sm)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                      The four descriptors this circuit reads
-                    </div>
                     <div style={{ width: '100%', height: 230, minWidth: 0 }}>
                       <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <RadarChart cx="50%" cy="50%" outerRadius="72%" data={featureData}>
@@ -792,13 +874,12 @@ export default function App() {
                         </RadarChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="figure-cap">
-                      One descriptor per qubit, normalised to the clamp ranges in the featuriser.
-                      Chosen by ablation: eight descriptors scored worse than these four.
-                    </div>
                   </div>
+                  </section>
 
-                  <div className="figure" style={{ padding: 0, overflow: 'hidden' }}>
+                  <section className="section">
+                  <h3>Reference structure</h3>
+                  <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
                     {isFolding ? (
                       <div style={{ height: 280, display: 'grid', placeItems: 'center', textAlign: 'center', padding: '1rem' }}>
                         <div>
@@ -811,8 +892,8 @@ export default function App() {
                     ) : (
                       <div style={{ position: 'relative', height: 280, overflow: 'hidden' }}>
                         <iframe
-                          key={pdbInput}
-                          src={`https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdbInput || '6m0j'}&showcommand=0&showmenu=0&showtitle=0`}
+                          key={`${pdbInput}-${theme}`}
+                          src={viewerSrc(pdbInput, theme, false)}
                           title="Protein structure"
                           style={{
                             /* Render the frame LARGER and crop it rather than
@@ -835,6 +916,7 @@ export default function App() {
                       structures, not predictions.
                     </div>
                   </div>
+                  </section>
                 </div>
               </div>
             </section>
@@ -900,7 +982,9 @@ export default function App() {
 
               {seir ? (
                 <>
-                  <dl className="facts" style={{ marginBottom: '1rem' }}>
+                  <section className="section">
+                  <h3>Parameters</h3>
+                  <dl className="facts">
                     <div><dt>β</dt><dd>{seir.parameters.beta}</dd></div>
                     <div><dt>σ</dt><dd>{seir.parameters.sigma}</dd></div>
                     <div><dt>γ</dt><dd>{seir.parameters.gamma}</dd></div>
@@ -910,7 +994,10 @@ export default function App() {
                     <div><dt>Herd-immunity threshold</dt><dd>{seir.indicators.herd_immunity_threshold_percent}%</dd></div>
                     <div><dt>Capacity breach</dt><dd>{seir.indicators.capacity_breach_day ?? 'none'}</dd></div>
                   </dl>
+                  </section>
 
+                  <section className="section">
+                  <h3>Curve</h3>
                   <div className="figure">
                     <div style={{ width: '100%', height: 360, minWidth: 0 }}>
                       <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -930,6 +1017,7 @@ export default function App() {
                       </ResponsiveContainer>
                     </div>
                   </div>
+                  </section>
                 </>
               ) : (
                 <p className="muted">Score a variant to run the scenario.</p>
@@ -949,7 +1037,10 @@ export default function App() {
               </div>
 
               <div className="cols cols-2">
-                <div className="stack" style={{ minWidth: 0 }}>
+                <div style={{ minWidth: 0 }}>
+                  <section className="section">
+                  <h3>Run the eigensolver</h3>
+                  <div className="stack">
                   <div className="sheet stack">
                     <div>
                       <label className="field" htmlFor="bond">
@@ -1041,16 +1132,18 @@ export default function App() {
                     60-step optimisation inside a web request tied up the server. Reproduce any point
                     with <code>notebooks/vqe_h2.ipynb</code>.
                   </p>
+                  </div>
+                  </section>
                 </div>
 
-                <div className="stack" style={{ minWidth: 0 }}>
-                  <div className="panel-head" style={{ marginBottom: 0 }}>
-                    <h3 style={{ fontSize: 'var(--t-md)' }}>What is actually being simulated</h3>
-                    <p className="lede">
-                      The eigensolver runs on H₂ — two atoms. The protein this project scores is
-                      elsewhere in the app. Keeping those apart is the point of this panel.
-                    </p>
-                  </div>
+                <div style={{ minWidth: 0 }}>
+                  <section className="section">
+                  <h3>What is actually simulated</h3>
+                  <p className="section-lede">
+                    The eigensolver runs on H₂ — two atoms. The protein this project scores is
+                    elsewhere in the app. Keeping those apart is the point of this panel.
+                  </p>
+                  <div className="stack">
 
                   <div className="sheet">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}>
@@ -1063,11 +1156,7 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ flex: 1, height: 1, background: C.rule }} />
-                    <span className="small mono">~25,000× more qubits</span>
-                    <div style={{ flex: 1, height: 1, background: C.rule }} />
-                  </div>
+                  <div className="divide"><span>~25,000× more qubits</span></div>
 
                   <div className="sheet">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}>
@@ -1086,6 +1175,8 @@ export default function App() {
                     → small active spaces of a ligand fragment against CASCI → a quantum active space
                     embedded in a classical DFT/MM calculation. Binding free energies stay out of reach.
                   </p>
+                  </div>
+                  </section>
                 </div>
               </div>
             </section>

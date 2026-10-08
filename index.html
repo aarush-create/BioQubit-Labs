@@ -14,6 +14,19 @@
     <title>Q-VIRA — which mutation should a lab test first?</title>
   </head>
   <body>
+    <script>
+      /* Set the theme before first paint. Without this a dark-mode visitor
+         gets a white flash while React boots. */
+      (function () {
+        try {
+          var t = localStorage.getItem('qvira-theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
