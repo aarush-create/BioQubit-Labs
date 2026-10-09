@@ -143,7 +143,12 @@ b, strong { font-weight: 600; }
   background: var(--paper);
   border-bottom: 1px solid var(--rule);
 }
-.masthead-in { display: flex; align-items: baseline; gap: 0.9rem; padding: 0.8rem 0; flex-wrap: wrap; }
+.masthead-in {
+  display: flex; align-items: baseline; gap: 0.9rem; flex-wrap: wrap;
+  /* padding-block, never the shorthand: this element is also .shell, and the
+     shorthand would silently drop the side gutters it inherits from there. */
+  padding-block: 0.8rem;
+}
 .wordmark { font-size: var(--t-md); font-weight: 700; letter-spacing: -0.035em; color: var(--ink); }
 .wordmark span { color: var(--assay); }
 .masthead-sub { font-size: var(--t-sm); color: var(--ink-2); }
@@ -153,7 +158,7 @@ b, strong { font-weight: 600; }
 /* The hero is the measurement, not a slogan: the question this tool answers,
    then the live readout of whatever is currently scored. */
 
-.hero { padding: 2.5rem 0 0.5rem; }
+.hero { padding-block: 2.5rem 0.5rem; }   /* padding-block: .hero is also .shell */
 .hero-q { font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.035em; max-width: 19ch; margin-bottom: 0.65rem; }
 .hero-sub { color: var(--ink-2); max-width: 62ch; }
 
@@ -549,6 +554,296 @@ details > summary:hover { color: var(--ink); }
    viewerSrc in App.jsx), never with a CSS filter — a filter would recolour the
    molecule too, and iCn3D colours chains and residues to mean something. */
 .viewer-shell { background: var(--sheet-sunk); }
+
+
+
+/* ============================================================ vocabulary */
+/* A page about protein mutations scored by a quantum circuit has perhaps forty
+   words a general reader will not know. Turning each into a blue link would
+   make the prose unreadable — a paragraph of links reads as a paragraph of
+   noise — so a term is marked the way a dictionary marks one: a dotted rule
+   under it, in the ink of the text, not a different colour. */
+
+.term {
+  appearance: none; background: none; padding: 0; cursor: help;
+  font: inherit; color: inherit; text-align: inherit;
+  border: 0; border-bottom: 1px dotted var(--assay);
+  text-underline-offset: 2px;
+}
+.term:hover, .term[aria-expanded='true'] {
+  color: var(--assay); border-bottom-style: solid;
+}
+.term::after {
+  /* a small raised dot, so the term is findable without reading every line */
+  content: '\00b0'; font-size: 0.75em; vertical-align: 0.35em;
+  color: var(--assay); margin-left: 0.05em; line-height: 0;
+}
+
+.term-pop {
+  position: fixed; z-index: 120;
+  display: flex; flex-direction: column; gap: 0.4rem;
+  background: var(--sheet); color: var(--ink);
+  border: 1px solid var(--ink); border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+  box-shadow: 0 10px 28px -12px rgba(var(--shade), 0.5);
+  font-size: var(--t-sm); line-height: 1.5; text-align: left;
+  animation: termin 140ms cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes termin { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .term-pop { animation: none; } }
+
+.term-pop-h { font-size: var(--t-sm); font-weight: 700; letter-spacing: -0.01em; }
+.term-pop-b { color: var(--ink-2); }
+.term-pop-a {
+  font-size: var(--t-xs); font-family: var(--mono); color: var(--assay);
+  text-decoration: none; border-top: 1px solid var(--rule-soft); padding-top: 0.45rem;
+}
+.term-pop-a:hover { text-decoration: underline; }
+
+/* a key under a chart whose axis labels can only be plain SVG text */
+.feature-key { margin: 1.1rem 0 0; display: grid; gap: 0.7rem; }
+.feature-key dt { font-size: var(--t-xs); font-weight: 700; color: var(--ink); }
+.feature-key dd {
+  margin: 0.15rem 0 0; font-size: var(--t-xs); color: var(--ink-2); line-height: 1.5;
+}
+
+/* ----------------------------------------------------------- glossary */
+
+.glossary { margin-top: 1.5rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
+.glossary > summary {
+  font-size: var(--t-sm); font-weight: 600; color: var(--ink);
+  list-style: none; display: flex; align-items: center; gap: 0.5rem;
+}
+.glossary > summary::-webkit-details-marker { display: none; }
+.glossary > summary::before {
+  content: '+'; font-family: var(--mono); color: var(--assay);
+  font-size: var(--t-base); line-height: 1; width: 0.9em;
+}
+.glossary[open] > summary::before { content: '\2212'; }
+.glossary > summary:hover { color: var(--assay); }
+
+.glossary-body { margin-top: 1.5rem; display: grid; gap: 2rem; }
+@media (min-width: 60rem) { .glossary-body { grid-template-columns: 1fr 1fr; gap: 2rem 3rem; } }
+.glossary-body h4 {
+  font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-3);
+  padding-bottom: 0.4rem; border-bottom: 1px solid var(--rule-soft); margin-bottom: 0.85rem;
+}
+.glossary-body dl { margin: 0; display: grid; gap: 0.85rem; }
+.glossary-body dt { font-size: var(--t-sm); font-weight: 600; }
+.glossary-body dt a { color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(--assay); }
+.glossary-body dt a:hover { color: var(--assay); }
+.glossary-body dd {
+  margin: 0.2rem 0 0; font-size: var(--t-sm); color: var(--ink-2); line-height: 1.55;
+  max-width: 62ch;
+}
+
+/* ========================================================== device layer */
+/* Everything below is about the machine the page is read on rather than the
+   page itself: a phone held in one hand, a tablet in a stand, a laptop at a
+   judging table. Three things change between them — how much screen the
+   hardware keeps for itself, how precisely you can point at something, and
+   how much vertical room a sticky header may fairly take. */
+
+:root {
+  /* With viewport-fit=cover the page paints under the notch and the home bar,
+     so anything anchored to an edge has to add the inset back itself. These
+     resolve to 0px on every device without a cutout. */
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  /* measured from the real masthead in App.jsx, so scroll targets stay correct
+     at widths where the header wraps in a way no breakpoint predicted */
+  --header-h: 0px;
+}
+
+body { padding-bottom: calc(4.5rem + var(--safe-b)); }
+.shell { padding-left: max(var(--gut), var(--safe-l)); padding-right: max(var(--gut), var(--safe-r)); }
+
+/* Anything we scroll to must land below the sticky header, not under it. */
+.rail, .panel-head, .section > h3, #instrument, [id] { scroll-margin-top: calc(var(--header-h) + 0.75rem); }
+
+/* Accessions and sequence fragments are the one kind of text with no spaces
+   in it; on a 320px screen they are what breaks a layout. */
+.mono, .lane-acc, .msg, .facts dd { overflow-wrap: anywhere; }
+
+/* ------------------------------------------------- pointing with a thumb */
+/* A mouse lands where you aimed; a finger lands within about 7mm of it. Every
+   control below is grown to the 44px Apple and Google both settled on, with
+   the visible shape left alone — only the target grows. */
+@media (pointer: coarse) {
+  .theme-toggle button { min-height: 44px; padding-inline: 0.9rem; }
+  .rail button        { padding-block: 1.05rem; }
+  .btn                { min-height: 44px; }
+  .btn-sm             { min-height: 38px; }
+  .try                { min-height: 40px; padding: 0.5rem 0.9rem; }
+  .pill               { min-height: 48px; }
+  details > summary   { min-height: 40px; display: flex; align-items: center; }
+  /* the track stays a hairline; the thing you can grab does not */
+  input[type='range'] { height: 44px; }
+
+  /* iOS zooms the entire page when a focused field is under 16px, and does not
+     zoom back out. The fields are the one place the type scale answers to the
+     phone rather than to the design. */
+  input[type='text'], input[type='search'], input[type='number'], select, textarea {
+    font-size: 1rem;
+  }
+
+  /* a grey rectangle flashing over a chip is not feedback anyone asked for */
+  a, button, summary, [role='tab'] { -webkit-tap-highlight-color: transparent; }
+}
+
+/* ------------------------------------------------------- the masthead bar */
+/* It is sticky, so every pixel it takes is taken from every screen below it.
+   On a phone it keeps the wordmark, the theme switch and the backend state,
+   and gives up everything that was only context. */
+
+.masthead-right { min-width: 0; }
+.status-line { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--ok);
+}
+.status-dot[data-state='waking'] { background: var(--flag); }
+.status-dot[data-state='down']   { background: var(--alarm); }
+.status-short { display: none; }
+.status-full  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 46rem) {
+  /* The front door is built to breathe on a 27-inch display. On a phone that
+     same air is a screenful of nothing before the first word. */
+  .stage { padding: 3.25rem 0 3.25rem; }
+  .figures { margin-top: 3rem; }
+
+  .masthead-in    { flex-wrap: nowrap; align-items: center; gap: 0.65rem; padding-block: 0.5rem; }
+  .masthead-sub   { display: none; }            /* the wordmark already says it */
+  .masthead-right { gap: 0.6rem; flex-wrap: nowrap; align-items: center; }
+  .status-full    { display: none; }
+  .status-short   { display: inline; }
+  .hide-sm        { display: none; }            /* "· model card", and the like */
+}
+
+/* ------------------------------------------------------------- the tabs */
+/* On a phone a panel is many screens long, so tabs at the top of it are tabs
+   you have to scroll back for. Below the width where the sheet fills the
+   viewport, the rail follows you down instead. */
+@media (max-width: 60rem) {
+  .rail {
+    position: sticky; top: var(--header-h); z-index: 30;
+    background: var(--paper);
+    margin-inline: calc(max(var(--gut), var(--safe-l)) * -1) calc(max(var(--gut), var(--safe-r)) * -1);
+    padding-inline: max(var(--gut), var(--safe-l)) max(var(--gut), var(--safe-r));
+    scroll-padding-inline: var(--gut);
+    /* 1rem, not 1.5: at a tablet's width the five tabs clear 768px by 26px
+       with the wider gap, and a rail that scrolls by one word reads as broken
+       rather than as scrollable. Below that it scrolls properly. */
+    gap: 1rem;
+  }
+}
+
+/* --------------------------------------------------------- overlays */
+/* A dialog with its own scrollbar inside a page that also scrolls is how a
+   phone loses the button at the bottom. On a phone the dialog simply becomes
+   the screen. */
+@media (max-width: 46rem) {
+  /* The overlay is what scrolls, because the page behind it is locked. Without
+     this the sheet simply grows past the bottom of a short phone and takes its
+     only button with it. */
+  .overlay {
+    padding: 0; align-items: stretch;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .dialog {
+    max-width: none; max-height: none; min-height: 100dvh;
+    border: 0; border-radius: 0;
+    padding: 1.35rem max(1.25rem, var(--safe-r)) calc(1.5rem + var(--safe-b)) max(1.25rem, var(--safe-l));
+  }
+  /* and the action stays on screen however long the text above it runs, so
+     nobody has to discover that the sheet scrolls before they can continue */
+  .dialog > .btn:last-child {
+    position: sticky; bottom: calc(0.25rem + var(--safe-b));
+    width: 100%;
+    box-shadow: 0 0 0 0.55rem var(--paper);   /* masks text passing behind it */
+  }
+}
+/* while a dialog is up, the page behind it holds still and the floating
+   button gets out of the way */
+body.has-overlay { overflow: hidden; }
+body.has-overlay .copilot-fab { display: none; }
+
+/* ------------------------------------------------------------- copilot */
+.copilot-fab {
+  position: fixed; z-index: 50;
+  right: max(1.25rem, var(--safe-r));
+  bottom: calc(1.25rem + var(--safe-b));
+}
+.copilot {
+  bottom: calc(1.25rem + var(--safe-b));
+  /* dvh, not vh: on iOS the URL bar makes vh taller than the screen actually
+     is, which is exactly how a chat input ends up under the keyboard */
+  height: min(28rem, calc(100dvh - 6rem));
+}
+@media (max-width: 46rem) {
+  .copilot {
+    left: 0.75rem; right: 0.75rem; width: auto;
+    bottom: calc(0.75rem + var(--safe-b));
+    height: min(26rem, 72dvh);
+  }
+  .copilot-fab { right: max(0.9rem, var(--safe-r)); bottom: calc(0.9rem + var(--safe-b)); }
+}
+
+/* --------------------------------------------- a phone turned on its side */
+/* 390px of height, a third of which was about to be masthead and hero. The
+   front door stops being a front door and the header stops following. */
+@media (max-height: 34rem) and (orientation: landscape) {
+  .masthead { position: static; }
+  .rail     { position: static; }
+  .stage    { padding: 2.25rem 0 2rem; }
+  .figures  { margin-top: 2rem; gap: 1.5rem 1.25rem; }
+  .stage-sub { margin-bottom: 1.5rem; }
+  /* the headline is sized off the width, which is the long side here; on a
+     screen this short it has to answer to the height instead */
+  .stage-h1  { font-size: clamp(1.9rem, 9vh, 3rem); margin-bottom: 0.9rem; }
+  .eyebrow   { margin-bottom: 0.7rem; }
+  .copilot  { height: min(20rem, 80dvh); }
+}
+
+/* A landscape phone is wider than the phone breakpoint and shorter than
+   everything it assumes, so the dialog rule has to be keyed on height too:
+   otherwise the welcome sheet is a wall of text with its button below the
+   fold and nothing to say that it scrolls. */
+@media (max-height: 34rem) {
+  .dialog { max-height: 92dvh; padding-bottom: 1rem; }
+  /* full width, so the paper halo masks a whole band rather than leaving the
+     paragraph behind it legible either side of the button */
+  .dialog > .btn:last-child {
+    position: sticky; bottom: 0; width: 100%;
+    box-shadow: 0 0 0 0.55rem var(--paper);
+  }
+}
+
+/* ------------------------------------------------------------- tablets */
+/* Between a phone and a laptop there is room for two columns of short items
+   well before there is room for two columns of prose. */
+@media (min-width: 46rem) and (max-width: 60rem) {
+  .caveats { columns: 2; column-gap: 2.5rem; }
+  .figures { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2rem 1.25rem; }
+}
+
+/* ---------------------------------------------------- very small phones */
+@media (max-width: 23.5rem) {
+  :root { --gut: 1.1rem; }
+  .stage { padding: 2.75rem 0 2.75rem; }
+  .stage-cta .pill { width: 100%; }           /* two full-width targets, stacked */
+  .facts { gap: 0 1.25rem; }
+}
+
+/* ------------------------------------------------ pointing with a mouse */
+/* Hover styling on a touch screen sticks after the tap, so the device that
+   cannot hover does not get told how hovering looks. */
+@media (hover: none) {
+  .pill:hover, .try:hover { transform: none; }
+}
 
 /* ----------------------------------------------------------------- print */
 
