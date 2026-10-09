@@ -161,9 +161,11 @@ and all three contradicted the intuitive answer:**
    ACE2 interface distance, measured from PDB 6M0J, took the VQC from 0.682 to
    0.747 — **+0.065, the largest single gain in the project** — from one number
    per site, looked up at zero runtime cost.
-2. **Fewer features beat more.** Four descriptors (0.747) beat all eight (0.640).
-   The four we dropped score 0.504–0.577 alone, close to noise, and each one
-   costs a qubit and more parameters.
+2. **Fewer features beat more.** Four descriptors (0.682) beat all eight (0.640),
+   both measured before `ace2_distance` entered — so this is the effect of the
+   feature count alone, not of finding 1 counted twice. The four we dropped
+   score 0.504–0.577 alone, close to noise, and each costs a qubit and more
+   parameters.
 3. **Depth and width are not independent.** Six layers *helped* at 4 qubits
    (0.672 → 0.682) and *hurt badly* at 8 (0.640 → 0.558), where the deeper
    circuit never trained below 0.556 loss. Consistent with barren plateaus: a
@@ -235,6 +237,20 @@ npm run dev
 
 The interface follows the operating system's light/dark preference on a first
 visit and remembers the choice afterwards; a toggle in the masthead switches it.
+
+It is built to be read on whatever the reader has to hand — verified across ten
+viewports from a 320px phone to a 1920px desktop, including a landscape phone
+and both tablet orientations. The masthead's height is measured at runtime and
+published as `--header-h`, so scroll targets clear it at any width; below 60rem
+the tab rail is sticky, because a panel is several screens long on a phone and
+tabs at the top of it are tabs you have to scroll back for. Form fields are 16px
+on touch devices, since iOS zooms the page on any smaller focused field and does
+not zoom back out.
+
+Technical vocabulary is explained in place rather than assumed. `src/glossary.js`
+holds a plain-English definition and a source link for every term on the page;
+a `<Term>` marks one inline and opens it on tap or hover, and the footer carries
+the whole glossary for reading up front.
 
 ### Deploy
 
@@ -348,7 +364,8 @@ notebooks/vqe_h2.ipynb  real VQE vs exact diagonalization + why it does not scal
 docs/JURY_QA.md         Q&A preparation
 RESULTS.md              every measured number, including the failures
 src/App.jsx             the dashboard
-src/index.css           the design system, light and dark
+src/index.css           the design system, light and dark, phone to desktop
+src/glossary.js         plain-English definitions and sources for every term
 ```
 
 ---

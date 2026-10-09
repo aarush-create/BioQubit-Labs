@@ -296,6 +296,25 @@ answer than the number was.*
 > while still displaying them. Promoting missing data to the top of a triage list
 > is the specific failure mode a surveillance tool must not have.
 
+**"Can I just open this on my phone?"**
+> Yes — hand them your phone rather than describing it. The app is verified
+> across ten viewports from a 320px phone to a 1920px desktop, including a
+> landscape phone and both tablet orientations: no horizontal scrolling, 44px
+> touch targets, and 16px form fields so iOS doesn't zoom the page when they tap
+> the mutation box. The tab rail sticks under the header on a phone, so they can
+> move between panels without scrolling back to the top.
+
+**"I don't know what half these words mean."**
+> That's answered in the product, not by you. Every technical term on the page is
+> marked with a dotted underline; tapping it gives a plain-English sentence and a
+> link to the source — Wikipedia for the established concepts, the primary paper
+> for the methods, RCSB for the structure. The footer carries the whole glossary,
+> 46 entries, grouped by field.
+>
+> Say this if it comes up: the vocabulary is explained *alongside* the technical
+> term, never instead of it. A specialist judge loses nothing; a judge from
+> another track can still follow what the model does.
+
 **"Could it generalise at all?"**
 > Possibly, partially. BLOSUM62 carries general signal about destabilising
 > substitutions in any protein. But we have zero measurements outside
@@ -327,6 +346,10 @@ it pre-empts the single most dangerous question in the room.
 4. If the backend dies the UI shows a red banner and **no numbers**. Point at it:
    "it refuses to show fabricated output" is a better moment than a smooth demo.
 5. Have `RESULTS.md` and `metrics.json` open in tabs — that's your evidence.
+6. Check `GET /` before you start: `copilot_providers` should read
+   `["gemini", "grok"]` and `sentinel.auto_refresh` should be `true`. If only one
+   provider is listed, the other key did not reach the process — the copilot
+   still works, but it has no fallback left.
 
 ## Slide checklist (max 10; FAQ says 8 — confirm in the portal)
 

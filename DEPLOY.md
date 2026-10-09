@@ -99,6 +99,16 @@ quota reset, a 429, a timeout, a renamed model. Either key alone is enough;
 with both, a demo survives one provider going down mid-question. The reply
 says which provider answered, so a fall-through is visible rather than hidden.
 
+Verify both keys actually reached the process — a key with a trailing space, or
+one added without restarting the service, leaves the chain one provider long and
+nothing says so until the fallback is needed:
+
+```bash
+curl -s https://q-vira-api.onrender.com/ | python3 -m json.tool | grep copilot
+#   "copilot_providers": ["gemini", "grok"],     <- both, not one
+#   "copilot_enabled": true,
+```
+
 Optional:
 
 ```
