@@ -1,0 +1,23 @@
+{
+  "logistic regression": {
+    "mean": 0.033,
+    "lo": 0.008,
+    "hi": 0.0592,
+    "vqc_wins_pct": 0.7,
+    "resolved": true
+  },
+  "neural network (MLP)": {
+    "mean": 0.0193,
+    "lo": -0.0018,
+    "hi": 0.0405,
+    "vqc_wins_pct": 3.5,
+    "resolved": false
+  },
+  "support vector machine": {
+    "mean": 0.0034,
+    "lo": -0.0177,
+    "hi": 0.0246,
+    "vqc_wins_pct": 37.8,
+    "resolved": false
+  }
+}

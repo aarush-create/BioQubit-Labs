@@ -73,8 +73,21 @@ rows) / 50 held-out sites (946 rows).
 | **VQC — 4 qubits, 6 layers, 74 parameters** | **0.7468** |
 | Always answer yes (chance) | 0.5000 |
 
-We place fourth of five. The VQC lands within 0.004 AUC of the SVM —
-indistinguishable on 946 rows — and trails logistic regression by 0.033.
+We place fourth of five on the point estimate. But 946 rows do not pin an AUC
+down very precisely, so we measured how much of that ordering is real. A paired
+bootstrap (10,000 resamples of the held-out rows, both models scoring identical
+rows on every draw — `api/bootstrap_gap.py`) gives:
+
+| Gap vs our VQC | mean | 95% CI | resolved at 95%? |
+|---|---|---|---|
+| Logistic regression | +0.0330 | [+0.0080, +0.0592] | **yes** |
+| Neural network (MLP) | +0.0193 | [−0.0018, +0.0405] | no |
+| Support vector machine | +0.0034 | [−0.0177, +0.0246] | no — we win 37.8% of resamples |
+
+**Two of the three gaps include zero.** Logistic regression genuinely beats the
+circuit; the SVM and the MLP are not separable from it on this much data. That
+is the honest summary — not a win, but a narrower loss than a league table
+suggests.
 
 Read AUC, not accuracy: the dataset is 68% positive, so every model scores
 ~0.69–0.73 accuracy by mostly answering "yes".
@@ -359,6 +372,7 @@ api/
   build_structure_features.py  per-residue distance to ACE2 from PDB 6M0J
   ace2_distance.json    the resulting structural feature (committed)
   train_vqc.py          training + classical baselines -> weights.npz, metrics.json
+  bootstrap_gap.py      paired bootstrap: which gaps to classical are real?
   main.py               FastAPI
 notebooks/vqe_h2.ipynb  real VQE vs exact diagonalization + why it does not scale
 docs/JURY_QA.md         Q&A preparation

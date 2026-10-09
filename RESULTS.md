@@ -38,6 +38,52 @@ mostly answer "yes" on a 68%-positive dataset. Accuracy is uninformative here.
 three classical baselines on identical features. We report the gap rather than
 hide it.
 
+## How precisely is any of this known?
+
+The headline table is read off **one** held-out set of 946 rows, so before
+treating "fourth of five" as a fact about the models, it is worth asking how
+precisely 946 rows pin an AUC down at all.
+
+`bootstrap_gap.py` answers that. It loads the committed `weights.npz` — so it
+describes the deployed model, not a fresh run — reproduces the shipped split,
+and resamples the held-out rows 10,000 times. The comparison is **paired**: on
+every draw both models score the identical resampled rows, which is the correct
+test for a difference measured on one shared test set, and is tighter than
+comparing two independent confidence intervals.
+
+Each model's own 95% interval is about 0.06 wide:
+
+| Model | AUC | 95% CI | width |
+|---|---|---|---|
+| Logistic regression | 0.7799 | [0.7496, 0.8085] | 0.059 |
+| Neural network (MLP) | 0.7661 | [0.7357, 0.7955] | 0.060 |
+| Support vector machine | 0.7504 | [0.7174, 0.7823] | 0.065 |
+| **VQC (ours)** | **0.7468** | **[0.7139, 0.7786]** | **0.065** |
+
+And the paired differences against our circuit:
+
+| Gap vs VQC | mean | 95% CI | VQC wins | resolved at 95%? |
+|---|---|---|---|---|
+| Logistic regression | +0.0330 | [+0.0080, +0.0592] | 0.7% of resamples | **yes** |
+| Neural network (MLP) | +0.0193 | [−0.0018, +0.0405] | 3.5% | no |
+| Support vector machine | +0.0034 | [−0.0177, +0.0246] | 37.8% | no |
+
+**Two of the three gaps include zero.** The SVM result in particular is pure
+sampling noise — resample the test rows and our circuit comes out ahead more
+than a third of the time. Only logistic regression is ahead by a margin this
+test set can actually resolve.
+
+This does not rescue the VQC into a win, and it is not meant to. It says the
+ranking is a weaker statement than a league table implies: the honest summary is
+*"logistic regression beats our circuit; the SVM and the MLP are not separable
+from it on this much data."*
+
+Reproduce:
+
+```bash
+cd api && python bootstrap_gap.py     # ~30 s, writes bootstrap_gap.json
+```
+
 ## How we got there — three ablations
 
 ### 1. Feature count: fewer is better

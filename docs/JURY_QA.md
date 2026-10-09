@@ -296,6 +296,33 @@ answer than the number was.*
 > while still displaying them. Promoting missing data to the top of a triage list
 > is the specific failure mode a surveillance tool must not have.
 
+**"You lose to all three classical models. Why is this a quantum project?"**  ⭐
+> On the point estimate, yes — and the model card leads with it. But we measured
+> how much of that ordering survives the sample size. A paired bootstrap over the
+> 946 held-out rows, 10,000 resamples, both models scoring identical rows on each
+> draw: logistic regression is ahead by +0.033 [+0.008, +0.059], which is real.
+> The MLP gap is +0.019 [−0.002, +0.041] and the SVM gap is +0.003
+> [−0.018, +0.025] — both include zero, and against the SVM our circuit wins
+> 37.8% of resamples.
+>
+> So the defensible claim is: logistic regression beats us; the other two are not
+> separable from us on this much data. Run `api/bootstrap_gap.py` and you get
+> those numbers from the committed weights in about thirty seconds.
+>
+> As for why quantum at four qubits — at this width the state is 16-dimensional
+> and classically simulable, which is the point. Every claim on the slide can be
+> checked by hand. We are not claiming advantage; we are claiming the design
+> decisions were driven by measurement, and three of them contradicted the
+> intuitive answer.
+
+**"Isn't the bootstrap just a way of explaining away a loss?"**
+> It would be if we had only run it on the gaps we lost. It is the same test for
+> all three, reported for all three, and it confirms the loss to logistic
+> regression rather than softening it. The test also tells us something we act on:
+> at this sample size, differences under ~0.05 AUC are not worth chasing, which
+> is why the roadmap goes after the representation (ESM-2) rather than tuning the
+> circuit for another 0.01.
+
 **"Can I just open this on my phone?"**
 > Yes — hand them your phone rather than describing it. The app is verified
 > across ten viewports from a 320px phone to a 1920px desktop, including a
