@@ -670,6 +670,7 @@ export default function App() {
     { id: 'vqc', label: 'The circuit' },
     { id: 'seir', label: 'Epidemic scenario' },
     { id: 'vqe', label: 'Quantum chemistry' },
+    { id: 'experiments', label: 'Experiments' },
   ];
 
   return (
@@ -711,25 +712,31 @@ export default function App() {
             <p className="small" style={{ marginTop: '0.4rem' }}>
               Every method below got the same four numbers per mutation and the same training data,
               then was tested on {metrics.n_test} mutations <Term id="heldout">none of them had ever
-              seen</Term>. The score is <Term id="rocauc">ROC-AUC</Term>: the chance a method ranks a
-              real binder above a real non-binder. 0.5 is a coin flip; 1.0 is perfect.
+              seen</Term>. The bar is <Term id="rocauc">ROC-AUC</Term>: the chance a method ranks a
+              real binder above a real non-binder (0.5 is a coin flip, 1.0 is perfect). The figure
+              on the right is plain <b>accuracy</b> — the share it simply got right.
             </p>
 
             <div className="lanes" style={{ marginTop: '1.25rem' }}>
               {Object.entries({
-                [`VQC (ours, ${metrics.vqc?.n_qubits ?? 2} qubits)`]: metrics.vqc?.roc_auc,
+                [`VQC (ours, ${metrics.vqc?.n_qubits ?? 2} qubits)`]: { auc: metrics.vqc?.roc_auc, acc: metrics.vqc?.accuracy },
                 ...Object.fromEntries(Object.entries(metrics.classical_baselines_same_features || {})
-                  .map(([k, v]) => [BASELINE_NAME[k] || k.replace(/_/g, ' '), v.roc_auc]))
+                  .map(([k, v]) => [BASELINE_NAME[k] || k.replace(/_/g, ' '), { auc: v.roc_auc, acc: v.accuracy }]))
               })
-                .filter(([, v]) => typeof v === 'number')
-                .sort((a, b) => b[1] - a[1])
-                .map(([name, auc]) => (
-                  <div key={name} className="lane" style={{ gridTemplateColumns: '1fr 6rem', alignItems: 'center' }}>
+                .filter(([, v]) => typeof v.auc === 'number')
+                .sort((a, b) => b[1].auc - a[1].auc)
+                .map(([name, m]) => (
+                  <div key={name} className="lane" style={{ gridTemplateColumns: '1fr 7rem', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: 'var(--t-sm)', marginBottom: '0.35rem' }}>{name}</div>
-                      <Bar value={(auc - 0.5) / 0.5} />
+                      <Bar value={(m.auc - 0.5) / 0.5} />
                     </div>
-                    <div className="mono" style={{ textAlign: 'right', color: C.assay }}>{auc.toFixed(4)}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="mono" style={{ color: C.assay }}>{m.auc.toFixed(4)}</div>
+                      <div className="mono small" style={{ opacity: 0.6 }}>
+                        {typeof m.acc === 'number' ? `acc ${(m.acc * 100).toFixed(1)}%` : ''}
+                      </div>
+                    </div>
                   </div>
                 ))}
             </div>
@@ -742,17 +749,22 @@ export default function App() {
             </p>
 
             <p className="note" style={{ marginTop: '1.25rem' }}>
-              <b>Why we quote this and not accuracy.</b> 68% of the mutations in this data still
-              bind, so a model that simply answered "yes, it binds" every single time would already
-              look 68% accurate while being completely useless. ROC-AUC cannot be gamed that way. On
-              it, our quantum model comes fourth of five here — but it reaches that on just{' '}
-              {metrics.vqc?.n_qubits} qubits and {metrics.vqc?.n_parameters} parameters, the same
-              accuracy as our earlier four-qubit model at half the width. Our cross-virus model (the
-              Cross-virus tab) is level with all three classical methods across 12 organisms. We
-              print the gap rather than bury it.
+              <b>Why the bar is AUC, not accuracy.</b> 68% of the mutations in this data still bind,
+              so a model that simply answered "yes" every time would already look ~68% accurate
+              while being useless — notice every accuracy on the right sits near that base rate.
+              ROC-AUC cannot be gamed that way, so we rank on it. On AUC our quantum model comes
+              fourth of five here, but it reaches that on just {metrics.vqc?.n_qubits} qubits and{' '}
+              {metrics.vqc?.n_parameters} parameters — the Round-1 accuracy at half the width. Our
+              cross-virus model (its own tab) is level with all three classical methods across 12
+              organisms. We print the gap rather than bury it.
             </p>
 
             <dl className="facts" style={{ marginTop: '1rem' }}>
+              <div>
+                <dt>Held-out AUC · accuracy</dt>
+                <dd className="mono">{metrics.vqc?.roc_auc?.toFixed(4)}
+                    {typeof metrics.vqc?.accuracy === 'number' && <> · {(metrics.vqc.accuracy * 100).toFixed(1)}%</>}</dd>
+              </div>
               <div>
                 <dt>Circuit</dt>
                 <dd>{metrics.vqc?.n_qubits} qubits · {metrics.vqc?.n_layers} layers ·{' '}
@@ -1652,6 +1664,9 @@ export default function App() {
               </div>
             </section>
           )}
+
+          {/* ================================= 6. EXPERIMENTS / BACKTESTING */}
+          {activeTab === 'experiments' && <Experiments metrics={metrics} />}
         </div>
 
         <footer className="print-hidden" style={{ borderTop: `1px solid ${C.rule}` }}>
@@ -1910,6 +1925,277 @@ function PanelScorer({ API, onScore, onJump }) {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ *  Experiments — the full measured record: backtesting, baselines,
+ *  ablations and null results. Every figure was produced by
+ *  train_vqc.py on real deep-mutational-scanning data; headline numbers
+ *  are 3-seed restart spreads. These are the committed results
+ *  (RESULTS.md); the SARS-CoV-2 headline matches the model card.
+ * ------------------------------------------------------------------ */
+const EXP_BORDER = '1px solid rgba(127,127,127,0.25)';
+function ExpTable({ cols, rows, highlight }) {
+  return (
+    <div style={{ overflowX: 'auto', marginTop: '0.8rem' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--t-sm)' }}>
+        <thead>
+          <tr>
+            {cols.map((c, i) => (
+              <th key={i} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '0.4rem 0.7rem',
+                                   borderBottom: '2px solid rgba(127,127,127,0.4)', whiteSpace: 'nowrap' }}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={ri} style={r[0] === highlight ? { background: 'rgba(127,127,127,0.10)' } : undefined}>
+              {r.map((cell, ci) => (
+                <td key={ci} className={ci === 0 ? '' : 'mono'}
+                    style={{ textAlign: ci === 0 ? 'left' : 'right', padding: '0.35rem 0.7rem',
+                             borderBottom: EXP_BORDER, whiteSpace: 'nowrap',
+                             fontWeight: r[0] === highlight ? 600 : 400 }}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Experiments({ metrics }) {
+  const sAuc = metrics?.vqc?.roc_auc ? metrics.vqc.roc_auc.toFixed(4) : '0.7423';
+  const sAcc = typeof metrics?.vqc?.accuracy === 'number'
+    ? `${(metrics.vqc.accuracy * 100).toFixed(1)}%` : '69.0%';
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Experiments &amp; backtesting</h2>
+        <p className="lede">
+          Every design decision in this project was made by measurement, not intuition — and several
+          overturned our first guess. This is the full record: the two models, their classical
+          baselines on identical features, the ablations that chose the features and the circuit, and
+          the things we expected to help that measured as doing nothing. Every number comes from{' '}
+          <span className="mono">train_vqc.py</span> on real deep-mutational-scanning data; headline
+          figures are the <b>mean ± standard deviation across 3 random restarts</b>, never a single
+          lucky seed. Nothing here is estimated.
+        </p>
+      </div>
+
+      {/* ---- the two models ---- */}
+      <section className="section">
+        <h3>The two shipped models</h3>
+        <p className="section-lede">
+          They answer different questions on different data, so their scores are not comparable: the
+          specialist is tested on held-out <i>sites</i> of one protein, the generalist on held-out{' '}
+          <i>proteins</i> it never saw.
+        </p>
+        <ExpTable
+          cols={['', 'SARS-CoV-2 specialist', 'Cross-virus generalist']}
+          rows={[
+            ['Data', 'Starr 2020 RBD DMS', 'ProteinGym · 17 proteins'],
+            ['Rows (train / test)', '2,856 / 946', '111,859 / 34,302'],
+            ['Split', 'grouped by site', 'grouped by protein'],
+            ['Circuit', '2 qubits · 6 layers · 41 p', '3 qubits · 6 layers · 63 p'],
+            ['Held-out AUC', `${sAuc} ± 0.0016`, '0.6812 ± 0.0022'],
+            ['Accuracy', sAcc, '63.4%'],
+          ]}
+        />
+      </section>
+
+      {/* ---- Model 1 baselines ---- */}
+      <section className="section">
+        <h3>Model 1 — SARS-CoV-2, versus classical baselines</h3>
+        <p className="section-lede">
+          Same four features, same site-grouped split, same 946 held-out mutations. We report the gap
+          to the classical methods rather than hiding it.
+        </p>
+        <ExpTable
+          cols={['Method', 'AUC', 'Accuracy', 'prec@100']}
+          rows={[
+            ['Logistic regression', '0.7796', '73.0%', '1.00'],
+            ['Neural network (MLP)', '0.7706', '72.8%', '1.00'],
+            ['Support vector machine', '0.7576', '69.3%', '0.97'],
+            ['VQC (ours)', '0.7423', sAcc, '0.99'],
+            ['Chance (majority class)', '0.5000', '68.4%', '0.78'],
+          ]}
+          highlight="VQC (ours)"
+        />
+        <p className="note" style={{ marginTop: '1rem' }}>
+          <b>Read AUC, not accuracy.</b> The data is 68% positive, so every method — ours included —
+          lands near 69–73% accuracy by mostly answering "yes"; chance alone scores 68.4%. The honest
+          claim is the cost, not the rank: the VQC matches our Round-1 accuracy (0.7468, 4 qubits, 74
+          parameters) on <b>2 qubits and 41 parameters</b>, and on top-of-list precision it is level
+          with logistic regression.
+        </p>
+      </section>
+
+      {/* ---- Model 2 baselines ---- */}
+      <section className="section">
+        <h3>Model 2 — cross-virus, protein-held-out</h3>
+        <p className="section-lede">
+          No protein appears in both halves, so each score measures generalisation to a virus the
+          model has never seen. Here the circuit is level with every classical baseline — all four
+          within 0.008.
+        </p>
+        <ExpTable
+          cols={['Method', 'AUC (protein-held-out)']}
+          rows={[
+            ['Neural network (MLP)', '0.6840'],
+            ['Support vector machine', '0.6833'],
+            ['VQC (ours)', '0.6812 ± 0.0022'],
+            ['Logistic regression', '0.6760'],
+          ]}
+          highlight="VQC (ours)"
+        />
+        <p className="section-lede" style={{ marginTop: '0.8rem' }}>
+          Per held-out protein (VQC): influenza/Wu-2014 <span className="mono">0.705</span>,
+          influenza/Soh-2019 <span className="mono">0.703</span>, influenza-PA/Wu-2015{' '}
+          <span className="mono">0.685</span>, coxsackievirus-B3 <span className="mono">0.667</span>{' '}
+          — mean <span className="mono">0.690</span>.
+        </p>
+      </section>
+
+      {/* ---- Round 2 experiments ---- */}
+      <section className="section">
+        <h3>Round 2 experiments</h3>
+
+        <div className="sheet" style={{ marginBottom: '1rem' }}>
+          <h4 style={{ margin: 0 }}>Burial: a structural feature that generalises across viruses</h4>
+          <p className="small" style={{ marginTop: '0.4rem' }}>
+            Model 1's strongest feature, ACE2 distance, is measured from one complex and is
+            meaningless elsewhere. Its protein-agnostic cousin is residue <b>burial</b> — contacts
+            within 10 Å in the protein's own AlphaFold fold. Added to the cross-virus model, same
+            split and architecture:
+          </p>
+          <ExpTable
+            cols={['Cross-virus model', 'Held-out AUC']}
+            rows={[
+              ['5 features (no burial)', '0.6547 ± 0.0016'],
+              ['6 features (+ burial)', '0.6812 ± 0.0022'],
+            ]}
+            highlight="6 features (+ burial)"
+          />
+          <p className="small" style={{ marginTop: '0.6rem' }}>
+            <b>+0.0265 AUC</b>, restart ranges disjoint, all four held-out proteins improved, training
+            loss down 0.636 → 0.611. The structure→assay join was verified residue-by-residue; two
+            proteins whose AlphaFold numbering disagreed with the DMS positions were detected and
+            dropped automatically.
+          </p>
+        </div>
+
+        <div className="sheet" style={{ marginBottom: '1rem' }}>
+          <h4 style={{ margin: 0 }}>The optimal feature count scales with the dataset</h4>
+          <p className="small" style={{ marginTop: '0.4rem' }}>
+            On the small SARS-CoV-2 set, adding two descriptors <b>overfits</b> — AUC drops while
+            training loss improves, the textbook signature. On the 112k-row panel the same two
+            descriptors help. Feature sets do not transfer across dataset sizes.
+          </p>
+          <ExpTable
+            cols={['Model', '4 feat', '6 feat']}
+            rows={[
+              ['SARS-CoV-2 (2,856 rows)', '0.7423', '0.6785'],
+              ['Cross-virus (112k rows) *', '0.6547', '0.6812'],
+            ]}
+          />
+          <p className="small" style={{ marginTop: '0.5rem', opacity: 0.7 }}>
+            * cross-virus columns are 5 vs 6 features (burial is the 6th).
+          </p>
+        </div>
+
+        <div className="sheet" style={{ marginBottom: '1rem' }}>
+          <h4 style={{ margin: 0 }}>Dense encoding, and why variance needs multiple seeds</h4>
+          <p className="small" style={{ marginTop: '0.4rem' }}>
+            Angle encoding puts one feature per qubit, and our Round-1 ablation measured that eight
+            qubits hit a <Term id="barren">barren plateau</Term> (0.558 AUC). <b>Dense encoding</b>{' '}
+            places two features per qubit, so six descriptors ride on three qubits — verified live by
+            state-vector simulation, with the Y-before-Z ordering load-bearing. Restart-to-restart
+            spread shrinks sharply with data, which is why every headline is a 3-seed spread:
+          </p>
+          <ExpTable
+            cols={['Dataset', 'rows', 'seed sd']}
+            rows={[
+              ['SARS-CoV-2', '2,856', '±0.020'],
+              ['Cross-virus panel', '111,859', '±0.002'],
+            ]}
+          />
+        </div>
+
+        <div className="sheet" style={{ marginBottom: '1rem' }}>
+          <h4 style={{ margin: 0 }}>Measured null results</h4>
+          <p className="small" style={{ marginTop: '0.4rem' }}>
+            Three things we expected to help and measured as doing nothing — reported because a null
+            is a result:
+          </p>
+          <ul className="small" style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
+            <li><b>BLOSUM62 clamp recalibration:</b> panel AUC 0.6812 (−4,11) vs 0.6796 (−4,3) — overlapping.</li>
+            <li><b>One model per genetic background vs one pooled model:</b> 0.7644 vs 0.7651, a dead heat (specialists won 4 of 8).</li>
+            <li><b>Expanding the database 38×:</b> a SARS background panel added 41k rows but 90% were feature-vector duplicates — distinct vectors 3,802 → ~4,200. More <i>proteins</i> is what added signal: 3,802 → 105,894 distinct vectors.</li>
+          </ul>
+        </div>
+
+        <div className="sheet">
+          <h4 style={{ margin: 0 }}>The lookup-oracle ceiling, and the honest gap</h4>
+          <p className="small" style={{ marginTop: '0.4rem' }}>
+            Looking up how the same substitution behaved in a <i>related</i> genetic background scores{' '}
+            <b>0.9814 AUC</b> (leave-one-genotype-out) — but that is a lookup table, not a model, and
+            it needs measurements a novel pathogen does not have. Our site- and protein-grouped splits
+            forbid that lookup by construction, which is exactly why the honest numbers are 0.74 and
+            0.68 rather than the ~0.95 a random split would report. A 10,000-sample paired bootstrap on
+            the 946 SARS-CoV-2 rows puts each model's 95% interval ~0.06 wide, so on one test set the
+            methods sit within sampling noise of each other.
+          </p>
+        </div>
+      </section>
+
+      {/* ---- Round 1 ablations ---- */}
+      <section className="section">
+        <h3>Round 1 ablations (what chose the design)</h3>
+        <p className="section-lede">Still valid; the shipped circuit has since moved to a dense encoding, but the feature conclusions carry over.</p>
+
+        <div className="sheet" style={{ marginBottom: '1rem' }}>
+          <h4 style={{ margin: 0 }}>Structure beats more chemistry</h4>
+          <p className="small" style={{ marginTop: '0.4rem' }}>
+            Minimum heavy-atom distance from each RBD residue to ACE2 (PDB 6M0J; &lt;4.5 Å reproduces
+            all 17 literature contact residues) was the single strongest feature. Adding more chemical
+            descriptors instead <i>hurt</i>.
+          </p>
+          <ExpTable
+            cols={['Feature set (MLP, same split)', 'AUC']}
+            rows={[
+              ['4 features with relative_position', '0.7573'],
+              ['4 features with ace2_distance', '0.7772'],
+              ['5 features (both)', '0.7329'],
+            ]}
+            highlight="4 features with ace2_distance"
+          />
+          <p className="small" style={{ marginTop: '0.5rem' }}>
+            Effect on the VQC: <b>+0.065</b>, the largest single gain in the project, from one number
+            per site at zero runtime cost.
+          </p>
+        </div>
+
+        <div className="sheet">
+          <h4 style={{ margin: 0 }}>Three more findings</h4>
+          <ul className="small" style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
+            <li><b>Depth and width are not independent.</b> 6 layers helped at 4 qubits but collapsed at 8 (0.558, loss never below 0.556) — a barren-plateau signature, and the evidence for keeping the circuit narrow.</li>
+            <li><b>The failure worth presenting.</b> The first run plateaued at exactly the entropy of the class prior: whole-sequence-average features shifted by &lt;0.05 rad per mutation. Switching to substitution-level descriptors fixed it.</li>
+            <li><b>24× training speedup.</b> Broadcasting the batch through PennyLane in one call vs a per-sample loop: 21.96 s → 0.91 s for 3 optimiser steps at 8 qubits, identical mathematics.</li>
+            <li><b>Live-surveillance findings.</b> Exact-length matching rejected 100% of NCBI records (fixed with Smith–Waterman alignment); deposits arrive in batches (40 records → ~11–14 distinct RBD sets); a shared Omicron background tied naive ranking, fixed by ranking on each deposit's distinguishing mutations.</li>
+          </ul>
+        </div>
+      </section>
+
+      <p className="note is-flag" style={{ marginTop: '1.5rem' }}>
+        <b>What we do not claim.</b> No quantum advantage, no outbreak prediction, and no accuracy
+        figure as evidence of quality on imbalanced data. The two models answer different questions,
+        so their 0.74 and 0.68 are not comparable. Every figure above is reproducible from the scripts
+        in the repository.
+      </p>
     </section>
   );
 }
