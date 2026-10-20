@@ -1933,7 +1933,7 @@ function StructureViewer({ dmsId, site, virus }) {
           if (!live || !viewer) return;
           viewer.resize();
           viewer.zoomTo();
-          viewer.zoom(0.85);   // pull back ~15% so it sits comfortably in the panel
+          viewer.zoom(1.4);    // zoomTo fits the bounding SPHERE (looks small); fill the panel
           viewer.render();
         };
         fit();
