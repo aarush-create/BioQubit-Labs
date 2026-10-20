@@ -13,18 +13,21 @@ rather than scoring nonsense, so this step is required.
 
 ```
 cd C:\Users\aarus\Downloads\qvira\api
-python train_vqc.py --data data\single_mut_effects.csv
+python train_vqc.py --data data\single_mut_effects.csv ^
+    --features 4,6,2,8 --readout probs --encoding dense --axes Y,Z ^
+    --seeds 3 --epochs 120 --val-frac 0.0
 ```
 
-No flags needed — the defaults (6 layers, 120 epochs, lr 0.05) reproduce the
-shipped model.
+This reproduces the shipped 2-qubit SARS-CoV-2 model (dense encoding, four
+features). The cross-virus model (`weights_panel.npz`) is committed; its training
+command is in the README under "Reproducing the cross-virus model".
 
 **Expect:**
 ```
-circuit: 4 qubits x 6 layers
+circuit:  2 qubits x 6 layers   (4 features on 2 wires)
 features: ['blosum62', 'wt_volume', 'delta_volume', 'ace2_distance']
-VQC                  acc~0.73  auc~0.75
-svm_rbf              auc~0.75      <- we match this
+test AUC = 0.742 +/- 0.002 (3-seed spread)
+svm_rbf              auc~0.76
 mlp                  auc~0.77
 logistic_regression  auc~0.78
 ```

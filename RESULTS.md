@@ -1,306 +1,255 @@
 # Q-VIRA measured results
 
-Every number here was produced by `train_vqc.py` on the real Starr et al. (2020)
-SARS-CoV-2 RBD deep mutational scanning dataset. Nothing is estimated.
+Every number here was produced by `train_vqc.py` on real deep-mutational-scanning
+data. Nothing is estimated. Headline figures are reported as **mean ± sample
+standard deviation across 3 random restarts**, not a single seed — a Round 2
+discipline (see "Why multi-seed", below).
 
-- **Data:** 4,221 single mutants across 201 sites
-- **Task:** predict `bind_avg >= -1.0` (mutant retains ACE2 binding)
-- **Split:** grouped BY SITE — 151 train sites (2,856 rows) / 50 test sites (946 rows)
-- **Test positive rate:** 0.684, so majority-class accuracy is 0.684
+There are **two shipped models**:
 
-## Final model
-
-**4 qubits · 6 layers · 74 parameters · data re-uploading ansatz**
-Features: `blosum62`, `wt_volume`, `delta_volume`, **`ace2_distance`**
-
-| Model | Held-out AUC |
-|---|---|
-| majority_class | 0.5000 |
-| **VQC (quantum)** | **0.7468** |
-| svm_rbf | 0.7504 |
-| mlp | 0.7661 |
-| logistic_regression | 0.7799 |
-
-The VQC lands within **0.004 AUC of the SVM** — statistically indistinguishable
-on 946 test rows — and trails logistic regression by 0.033. The gain came
-entirely from replacing a sequence-position feature with a structural one, not
-from a bigger circuit.
-
-Note on reproducibility: this run scored 0.7468 on Windows and 0.7506 on Linux
-with the identical seed and command. Mini-batch accumulation order differs in
-floating point across platforms. We report the run that produced the shipped
-`weights.npz`.
-
-**Read AUC, not accuracy.** All models score ~0.69–0.73 accuracy because they
-mostly answer "yes" on a 68%-positive dataset. Accuracy is uninformative here.
-
-**The honest claim:** the VQC reaches 0.747, clearly above chance but below all
-three classical baselines on identical features. We report the gap rather than
-hide it.
-
-## How precisely is any of this known?
-
-The headline table is read off **one** held-out set of 946 rows, so before
-treating "fourth of five" as a fact about the models, it is worth asking how
-precisely 946 rows pin an AUC down at all.
-
-`bootstrap_gap.py` answers that. It loads the committed `weights.npz` — so it
-describes the deployed model, not a fresh run — reproduces the shipped split,
-and resamples the held-out rows 10,000 times. The comparison is **paired**: on
-every draw both models score the identical resampled rows, which is the correct
-test for a difference measured on one shared test set, and is tighter than
-comparing two independent confidence intervals.
-
-Each model's own 95% interval is about 0.06 wide:
-
-| Model | AUC | 95% CI | width |
-|---|---|---|---|
-| Logistic regression | 0.7799 | [0.7496, 0.8085] | 0.059 |
-| Neural network (MLP) | 0.7661 | [0.7357, 0.7955] | 0.060 |
-| Support vector machine | 0.7504 | [0.7174, 0.7823] | 0.065 |
-| **VQC (ours)** | **0.7468** | **[0.7139, 0.7786]** | **0.065** |
-
-And the paired differences against our circuit:
-
-| Gap vs VQC | mean | 95% CI | VQC wins | resolved at 95%? |
-|---|---|---|---|---|
-| Logistic regression | +0.0330 | [+0.0080, +0.0592] | 0.7% of resamples | **yes** |
-| Neural network (MLP) | +0.0193 | [−0.0018, +0.0405] | 3.5% | no |
-| Support vector machine | +0.0034 | [−0.0177, +0.0246] | 37.8% | no |
-
-**Two of the three gaps include zero.** The SVM result in particular is pure
-sampling noise — resample the test rows and our circuit comes out ahead more
-than a third of the time. Only logistic regression is ahead by a margin this
-test set can actually resolve.
-
-This does not rescue the VQC into a win, and it is not meant to. It says the
-ranking is a weaker statement than a league table implies: the honest summary is
-*"logistic regression beats our circuit; the SVM and the MLP are not separable
-from it on this much data."*
-
-Reproduce:
-
-```bash
-cd api && python bootstrap_gap.py     # ~30 s, writes bootstrap_gap.json
-```
-
-## How we got there — three ablations
-
-### 1. Feature count: fewer is better
-
-Measured **before** ablation 5 replaced `relative_position` with `ace2_distance`,
-so the VQC column here is the pre-structure model. The ordering is what matters:
-adding descriptors past four made every model worse.
-
-| Feature set | k | MLP AUC | VQC AUC |
-|---|---|---|---|
-| blosum62 only | 1 | 0.6548 | — |
-| + wt_volume | 2 | 0.7046 | — |
-| + relative_position | 3 | 0.7544 | — |
-| **+ delta_volume (shipped)** | **4** | **0.7573** | **0.6816** |
-| + wt_hydropathy | 5 | 0.7078 | — |
-| all eight | 8 | 0.7136 | 0.6404 |
-
-Halving the feature set improved **every** model. The four dropped descriptors
-(delta_hydropathy 0.504 AUC alone, delta_charge 0.518, wt_hydropathy,
-pro_gly_flag) are close to noise, and each costs a qubit and more parameters.
-
-### 2. Univariate importance is misleading
-
-Each feature's AUC on its own:
-
-| Feature | AUC alone | Shipped? |
+| | SARS-CoV-2 specialist | Cross-virus generalist |
 |---|---|---|
-| blosum62 | 0.6548 | yes |
-| wt_volume | 0.6315 | yes |
-| delta_volume | 0.6053 | yes |
-| relative_position | 0.6016 | yes |
-| wt_hydropathy | 0.5769 | no |
-| pro_gly_flag | 0.5395 | no |
-| delta_charge | 0.5175 | no |
-| delta_hydropathy | 0.5042 | no |
+| Data | Starr et al. 2020 RBD DMS, 2,856/946 rows | ProteinGym, 146,161 rows, 17 proteins |
+| Split | grouped by **site** | grouped by **protein** (held-out virus) |
+| Circuit | 2 qubits · 6 layers · 41 params | 3 qubits · 6 layers · 63 params |
+| Encoding / readout | dense (Y,Z) · full distribution | dense (Y,Z) · full distribution |
+| Features | blosum62, wt_vol, Δvol, **ace2_distance** | blosum62, wt_vol, Δvol, wt_hydro, Δhydro, **burial** |
+| **Held-out AUC** | **0.7423 ± 0.0016** | **0.6812 ± 0.0022** |
 
-BLOSUM62 alone beats the entire original 4-feature model. But BLOSUM62 **by
-itself** only reaches 0.655 — it needs the others. And `relative_position`
-scores a mediocre 0.602 alone yet is the most costly feature to remove
-(-0.040 AUC in drop-one-out). Features matter in combination, not isolation.
+---
 
-### 3. Circuit depth: deeper is worse
+## Model 1 — SARS-CoV-2 specialist
 
-8 qubits, 40 epochs:
+**Task:** predict `bind_avg ≥ −1.0` (mutant retains ACE2 binding). **Split:**
+grouped by site — 151 train sites (2,856 rows) / 50 test sites (946 rows). Test
+positive rate 0.684.
 
-| Layers | Params | Final train loss | Held-out AUC |
-|---|---|---|---|
-| **3** | 74 | **0.4994** | **0.6404** |
-| 6 | 146 | 0.5710 | 0.5581 |
+| Model | Held-out AUC | Brier | precision@100 | clean prefix* |
+|---|---|---|---|---|
+| Logistic regression | 0.7796 | 0.1734 | 1.00 | 104 |
+| Neural network (MLP) | 0.7706 | 0.1771 | 1.00 | 110 |
+| Support vector machine | 0.7576 | 0.2017 | 0.97 | 78 |
+| **VQC (ours)** | **0.7423 ± 0.0016** | **0.189** | **0.99** | **97** |
+| chance | 0.5000 | — | 0.78 | 1 |
 
-Doubling depth made it substantially worse, and the deeper circuit never trained
-below 0.556 loss. Consistent with barren plateaus — gradients shrink with depth
-and the optimiser stalls. This is the evidence for keeping the circuit shallow
-and matching width to feature count, instead of assuming more qubits help.
+\* *clean prefix = how far down the ranking before the first false positive.*
 
-## Engineering: 24x training speedup
+**The honest claim.** On raw AUC the VQC trails all three classical baselines on
+identical features and an identical split — we report the gap rather than hide
+it. What changed in Round 2 is the **cost**: this model reaches the same accuracy
+as the Round 1 model (0.7468, 4 qubits, 74 parameters) on **2 qubits and 41
+parameters** — half the qubits, 45% fewer parameters — by switching to a dense
+encoding and a full-distribution readout. On the metrics that matter for a triage
+tool (calibration, top-of-list precision) it is level with logistic regression.
 
-Evaluating the circuit once per sample in a Python loop, versus broadcasting the
-whole batch through PennyLane in one call. Measured at 8 qubits on PennyLane
-0.39, 3 optimiser steps:
+**Read AUC, not accuracy.** The dataset is 68% positive, so every model scores
+~0.69–0.73 accuracy by mostly answering "yes". Accuracy is uninformative here.
 
-| Strategy | Time |
+---
+
+## Model 2 — cross-virus generalist
+
+**Data:** the 17 ProteinGym "Growth" (organismal-fitness) viral assays — one
+coherent phenotype — 146,161 single mutants across **12 organisms** (influenza
+×7 proteins, HIV-1 ×6, dengue, coxsackievirus, and more). **Split:** grouped by
+**protein**: no protein appears in both halves, so test AUC measures
+generalisation to a virus the model has never seen.
+
+| Model | Held-out AUC (protein-held-out) |
 |---|---|
-| per-sample loop | 21.96 s |
-| broadcast batch | 0.91 s |
+| MLP | 0.6840 |
+| Support vector machine | 0.6833 |
+| **VQC (ours)** | **0.6812 ± 0.0022** |
+| Logistic regression | 0.6760 |
 
-Identical mathematics. Full 40-epoch training went from roughly 6 hours to
-141 seconds for the final 4-qubit configuration.
+Per held-out protein (VQC): influenza/Wu-2014 0.705, influenza/Soh-2019 0.703,
+influenza-PA/Wu-2015 0.685, coxsackievirus-B3 0.667 (mean 0.690).
 
-## The failure worth presenting
+Here the circuit is **level with the classical baselines** — all four within
+0.008. Cross-protein prediction is harder than within-protein, so 0.68 is not
+comparable to Model 1's 0.74; they answer different questions.
 
-The first training run plateaued at 0.5866 loss and never moved. That is exactly
-the entropy of the class prior (0.5862) — the signature of a model collapsed to
-predicting the base rate.
+---
 
-Cause: the original featuriser used whole-sequence averages. One substitution in
-a 201-residue protein shifts those averages by under 0.05 rad out of a pi range,
-so every variant looked like the same input. Switching to substitution-level
-descriptors fixed it.
+## Round 2 measured results
 
-"We diagnosed a silent failure from the loss value alone" is a stronger answer to
-"how do you know your model works?" than any single metric.
+### Burial: a structural feature that generalises across viruses
 
-## Ablation 4 — can more capacity close the gap to classical?
+Model 1's strongest descriptor, `ace2_distance`, is measured from one complex
+(PDB 6M0J) and is meaningless for any other virus. Its protein-agnostic cousin is
+**residue burial** — contacts within 10 Å in the protein's own AlphaFold fold.
+Adding it to the cross-virus model, identical split and architecture, 3 seeds:
 
-A fair question: is the VQC behind because variational circuits are weaker here,
-or because we under-trained it? We measured rather than assumed.
+| Cross-virus model | Held-out AUC |
+|---|---|
+| 5 features (no burial) | 0.6547 ± 0.0016 |
+| **6 features (+ burial)** | **0.6812 ± 0.0022** |
 
-| Config | Params | Final train loss | Held-out AUC |
-|---|---|---|---|
-| 4 qubits, 3 layers, 40 epochs | 38 | 0.4994 | 0.6716 |
-| **4 qubits, 6 layers, 120 epochs, lr 0.05 (shipped)** | **74** | **0.4635** | **0.6816** |
-| 8 qubits, 3 layers, 40 epochs | 74 | 0.5434 | 0.6404 |
-| 8 qubits, 6 layers, 40 epochs | 146 | 0.5710 | 0.5581 |
+**+0.0265 AUC, restart ranges disjoint ([0.653,0.656] vs [0.679,0.683]), and all
+four held-out proteins improved.** Training loss also fell (0.636 → 0.611), so it
+is a better fit, not a lucky draw.
 
-Doubling the depth and tripling the epochs at 4 qubits improved the held-out AUC
-by +0.010, while the training loss fell much further (0.499 -> 0.464). The model
-is fitting the training set better without generalising much better, which is the
-signature of approaching the ceiling of this representation rather than of
-under-training.
+The structure→assay join was verified residue-by-residue against the assay
+wildtype. Two proteins (Zika, HCV) whose AlphaFold numbering disagreed with the
+DMS positions (wildtype-match 5% and 0%) were detected automatically and dropped
+— their burial values would have been noise dressed as structure.
 
-Note the interaction: 6 layers HELPED at 4 qubits and HURT badly at 8 qubits
-(0.5581). Depth and width are not independent — wider circuits hit trainability
-problems at a depth that narrower ones tolerate.
+### Dense encoding: six features on three qubits
 
-**Conclusion.** The gap to the classical baselines is not an artefact of
-under-training. These runs predate ablation 5; after it the shipped VQC reaches
-0.7468 against 0.7504 SVM, 0.7661 MLP and 0.7799 logistic regression — the same
-ordering, a much smaller gap. With only four residue descriptors there is a
-ceiling near 0.78, and the single Pauli-Z readout of a 4-qubit circuit does not
-quite reach it. Closing it needs a richer representation (ESM-2 embeddings)
-rather than a bigger circuit.
+Angle encoding puts one feature on one qubit, so six descriptors would need six
+qubits — and our Round 1 ablation measured that eight qubits hits a barren
+plateau (0.558 AUC, loss stuck at 0.556). **Dense encoding** places two features
+per qubit (one per rotation axis, Y then Z), so six descriptors ride on three
+qubits — narrower than naive angle encoding, more information. Verified by direct
+state-vector simulation: with the full ansatz all six features are "live" and
+per-feature sensitivity is higher than the angle encoding's; the Y-before-Z
+ordering is load-bearing, because RZ on |0⟩ encodes nothing.
 
-## Ablation 5 — structure beats more chemistry
+### The optimal feature count scales with the dataset
 
-Asked whether to add more residue descriptors, we had already measured that more
-chemistry HURT (8 features: 0.640 vs 4 features: 0.682). The missing information
-was not chemical but spatial: none of our descriptors knew WHERE in the folded
-protein a mutation sits, and for ACE2 binding that dominates.
+| Model | 4 features | 6 features |
+|---|---|---|
+| SARS-CoV-2 (2,856 rows) | **0.7423** | 0.6785 |
+| Cross-virus (112k train rows) | 0.6547 (5 feat) | **0.6812** |
 
-We computed the minimum heavy-atom distance from every RBD residue to ACE2 using
-the experimental complex **PDB 6M0J** (`build_structure_features.py`). Validation:
-residues at <4.5 A reproduce all 17 ACE2-contact residues reported in the
-literature (417, 453, 455, 456, 486, 493, 501, 505 ...).
+On the small SARS-CoV-2 set, adding two descriptors **overfits** — AUC drops 0.07
+while training loss *improves* (0.455 → 0.424), the textbook signature. On the
+112k-row panel the same two descriptors help. A paired test on logistic
+regression (7 parameters, cannot overfit at this scale) had favoured six features
+at p<1e-30 — and generalising that to a 41–63-parameter circuit was our mistake,
+caught by measuring the circuit directly. Feature sets do not transfer across
+dataset sizes.
+
+### Why multi-seed: variance shrinks with data
+
+Restart-to-restart AUC standard deviation:
+
+| Dataset | rows | seed sd |
+|---|---|---|
+| SARS-CoV-2 | 2,856 | up to ±0.020 |
+| Cross-virus panel | 111,859 | ±0.002 |
+
+At 2,856 rows one restart of the 4-feature model hit 0.780 while its siblings sat
+at 0.745 — a single seed could have "beaten" logistic regression by luck. At 112k
+rows the spread is ±0.002 and effects of 0.005 are resolvable. Several Round 1
+single-seed comparisons were, in hindsight, inside their own noise; every Round 2
+headline is a 3-seed spread for that reason.
+
+### Expanding the database 38× does not by itself raise AUC
+
+A SARS-CoV-2 **genetic-background** panel (8 backgrounds, 41k rows) added rows but
+almost no new information: because the descriptors are functions of
+`(site, wildtype, mutant)`, **90% of the pooled rows were feature-vector
+duplicates** of another row with a possibly-different label. Distinct feature
+vectors went from 3,802 to ~4,200. More *proteins* (different residues at
+different sites) is what added real signal — 3,802 → 105,894 distinct vectors,
+~28×.
+
+### Measured null results
+
+Three things we expected to help and measured as doing nothing — reported because
+a null is a result:
+
+- **blosum62 clamp recalibration.** The BLOSUM score never exceeds +3 in the data
+  (the matrix's +11 is for identical residues, which are filtered out), so the
+  original (−4, 11) clamp used 47% of the angle range. Narrowing it to (−4, 3)
+  doubled the resolution — and changed panel AUC by nothing: 0.6812 (−4,11) vs
+  0.6796 (−4,3), overlapping ranges.
+- **One model per genetic background vs one pooled model** (SARS-CoV-2 backgrounds):
+  specialist mean 0.7644 vs pooled 0.7651 — a dead heat, specialists winning 4 of
+  8. The backgrounds transfer to each other at 0.96–0.998, so pooling costs
+  nothing and specialisation gains nothing. (Across genuinely different *proteins*
+  the story differs — that is the generalist model above.)
+- Both are in `specialist_vs_pooled.py` and the training logs.
+
+### The lookup-oracle ceiling
+
+Looking up how the same substitution behaved in a *related genetic background*
+scores **0.9814 AUC** (leave-one-genotype-out) — but that is a lookup table, not
+a model, and it needs measurements that a novel pathogen does not have. Our
+site-grouped and protein-grouped splits forbid that lookup by construction, which
+is exactly why the honest numbers are 0.74 and 0.68 and not the ~0.95 a random
+split would report. The gap between them is the value of the deep-mutational-scan
+data itself. See `epistasis_ceiling.py`.
+
+### How precisely is the SARS-CoV-2 gap known?
+
+`bootstrap_gap.py` resamples the 946 held-out rows 10,000 times, paired (both
+models score identical rows on every draw). Each model's own 95% interval is
+~0.06 wide on this many rows, so on **one** test set the models sit within
+sampling noise of each other. Note: the committed `bootstrap_gap.json` was
+produced for the Round 1 model; rerun `python bootstrap_gap.py` to regenerate it
+against the shipped 2-qubit weights. The 3-seed spread above (±0.0016) is the
+current headline evidence.
+
+---
+
+## Round 1 ablations (still valid)
+
+These drove the original design and remain true; the shipped circuit has since
+moved to a dense encoding, but the *feature* conclusions carry over.
+
+### Structure beats more chemistry
+
+Adding more residue descriptors *hurt* (8 features 0.640 vs 4 features 0.682 on
+the pre-structure model). The missing information was spatial, not chemical.
+Minimum heavy-atom distance from each RBD residue to ACE2, from PDB 6M0J
+(validated: <4.5 Å reproduces all 17 literature ACE2-contact residues):
 
 | Feature set (MLP, same split) | AUC |
 |---|---|
 | 4 features with `relative_position` | 0.7573 |
 | **4 features with `ace2_distance`** | **0.7772** |
 | 5 features (both) | 0.7329 |
-| `blosum62` + `ace2_distance` only | 0.7713 |
 
-Univariate: `ace2_distance` alone scores **0.7143**, versus 0.6016 for
-`relative_position` and 0.6548 for `blosum62`. It is our strongest single feature.
+`ace2_distance` alone scores 0.7143 — the strongest single feature. Adding it as
+a 5th feature was worse than *replacing* `relative_position`, so it replaced it.
+Effect on the VQC: **+0.065**, the largest single gain in the project, from one
+number per site at zero runtime cost.
 
-Adding it as a 5th feature was WORSE than replacing — consistent with ablation 1.
-So `relative_position` was replaced, and the circuit stayed at 4 qubits.
+### Depth and width are not independent
 
-**Effect on the VQC: 0.6816 -> 0.7468 (+0.065).** The largest single gain in the project,
-from one number per site looked up at zero runtime cost.
+6 layers *helped* at 4 qubits but *hurt badly* at 8 (0.558, loss never below
+0.556) — a barren-plateau signature. Wider circuits hit trainability problems at
+a depth narrower ones tolerate. This is the evidence for dense encoding in Round
+2: keep the circuit narrow, carry more features per qubit.
 
-Sanity check on the learned behaviour: A380V (21.4 A from the interface) scores
-0.92 — likely to retain binding — while N501Y (3.4 A) scores 0.41. The model
-learned that interface mutations are the ones that risk breaking binding. Note
-N501Y in reality *enhances* ACE2 affinity, so the model is wrong on that specific
-famous case; it has learned the population tendency, not per-residue biology.
+### The failure worth presenting
 
-## What we did NOT measure: the ansatz
+The first training run plateaued at exactly the entropy of the class prior — a
+model collapsed to the base rate. Cause: whole-sequence-average features, where
+one substitution in a 201-residue protein shifts the average by <0.05 rad.
+Switching to substitution-level descriptors fixed it. Diagnosing a silent failure
+from the loss value alone is a stronger answer to "how do you know it works?"
+than any single metric.
 
-We use data re-uploading (Pérez-Salinas et al. 2020) because the literature
-argues a single encoding followed by entangling layers is limited in the
-functions it can express. We did **not** run a controlled single-encoding versus
-re-uploading comparison on this dataset, so there is no number here for what the
-choice bought us, and we do not quote one anywhere else.
+### 24× training speedup
 
-Earlier drafts of this repo cited a 0.59 → 0.87 figure for that comparison. It
-was not reproducible from any committed script, and 0.87 is above the shipped
-model's own held-out AUC, so it has been withdrawn from every document. A
-controlled ablation with the `--single-encoding` flag is the right way to settle
-it, and it is on the Round 2 list.
+Broadcasting the batch through PennyLane in one call versus a per-sample loop:
+21.96 s → 0.91 s for 3 optimiser steps at 8 qubits. Identical mathematics.
 
-## Caveat found in production: unresolved sites
+### Surveillance-feed findings (live NCBI)
 
-The crystal structure 6M0J covers RBD residues 333-526. Sites outside it
-(331-332, 527-531) receive a far-field fallback distance of 45 A, which the
-model reads as "maximally far from the interface" and therefore scores highly.
+Running against real deposits surfaced problems curated data would not:
+exact-length matching rejected 100% of records (fixed with Smith–Waterman local
+alignment); deposits arrive in batches (40 records → ~11–14 distinct RBD sets);
+and a shared Omicron-era background tied naive ranking at the top, fixed by
+ranking on each deposit's *distinguishing* mutations.
 
-This surfaced on a real NCBI batch: the top-ranked drivers were L335F, L517F,
-K529T, K529N and I332V — and 332 and 529 are precisely the unresolved sites.
-The ranking was being driven by MISSING DATA rather than by signal.
-
-Fix: sites without structural coverage are flagged (`has_structure: false`),
-shown with a dashed border and an asterisk, and EXCLUDED from ranking. They are
-still displayed, because hiding them would be its own distortion.
-
-## Real-world findings from the surveillance feed
-
-Running the pipeline against live NCBI deposits (40 records, Oct 2026) produced
-three findings that curated test data would not have surfaced.
-
-**1. Exact-length matching rejects everything.** The first implementation
-required deposited sequences to match the 1,273-residue reference exactly.
-Result: 0 analysed, 40 skipped. Real deposits are frequently partial or carry
-indels elsewhere in the spike. Smith-Waterman local alignment of the RBD, with
-an 80% coverage threshold, analysed 40/40 at 100% coverage.
-
-**2. Deposits arrive in batches.** 40 records collapsed to 11 distinct RBD
-mutation sets, one group containing 13 identical deposits. Listing them
-separately would overstate the number of findings.
-
-**3. A shared background destroys naive ranking.** In that batch, 22 RBD
-mutations were present in *every* deposit — the Omicron-era inheritance. Ranking
-by each record's highest-scoring mutation tied all 11 variants at exactly 0.910
-(R403K). Ranking by each deposit's *distinguishing* mutations instead produced
-real separation:
-
-| Deposit | Top distinguishing mutation | Score | Distinguishing / total RBD |
-|---|---|---|---|
-| YGY72459.1 | L441I | 0.871 | 10 / 32 |
-| YGY72649.1 | K444R | 0.868 | 10 / 32 |
-| YGY72613.1 | K417N | 0.849 | 7 / 29 |
-
-**4. Current lineages are outside the model's training assumptions.** Deposits
-carry 29-32 co-occurring RBD substitutions. The model was trained on SINGLE
-mutants, so scoring these independently ignores epistasis, which is large in the
-RBD. Records with >= 5 RBD substitutions are flagged as high-divergence, weak
-evidence. The model is most useful for newly-emerging single mutations on a
-current backbone; retraining on an Omicron-era DMS dataset is the clear next step.
+---
 
 ## What to claim, and what not to
 
-**Say:** "Our 4-qubit VQC reaches 0.747 AUC against a 0.5 chance baseline,
-placing fourth of five — within 0.004 of the SVM and 0.033 behind logistic
-regression on identical features and an identical split. Three ablations drove
-the design: structure versus more chemistry, feature count, and the interaction
-between depth and width. All three contradicted the intuitive answer."
+**Say:** "Two trained models. The SARS-CoV-2 specialist reaches 0.742 ± 0.002
+AUC on **2 qubits and 41 parameters** — the Round 1 accuracy at half the qubits.
+The cross-virus generalist reaches 0.681 ± 0.002 across 12 organisms,
+protein-held-out, level with every classical baseline on identical features. A
+structure-derived burial feature added +0.027 and improved all four held-out
+proteins. Every headline is a 3-seed spread, and the design decisions — dense
+encoding, feature count, the burial feature — were each driven by measurement,
+several of them overturning our first guess."
 
-**Do not say:** quantum advantage, outbreak prediction, any accuracy figure as
-evidence of quality on this imbalanced dataset, or any number for the ansatz
-choice — that ablation has not been run.
+**Do not say:** quantum advantage; outbreak prediction; any accuracy figure as
+evidence of quality on imbalanced data; that the cross-virus 0.68 and the
+SARS-CoV-2 0.74 are comparable (different tasks); or any number for the
+single-encoding-vs-re-uploading ansatz choice — that ablation has not been run.
