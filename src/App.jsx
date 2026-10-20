@@ -634,6 +634,7 @@ export default function App() {
     { id: 'sentinel', label: 'Surveillance feed' },
     { id: 'genomics', label: 'Score a variant' },
     { id: 'vqc', label: 'The circuit' },
+    { id: 'panel', label: 'Other viruses' },
     { id: 'seir', label: 'Epidemic scenario' },
     { id: 'vqe', label: 'Quantum chemistry' },
   ];
@@ -1344,6 +1345,9 @@ export default function App() {
             </section>
           )}
 
+          {/* ===================================== 3b. OTHER VIRUSES (panel) */}
+          {activeTab === 'panel' && <PanelScorer API={API} />}
+
           {/* ================================================ 4. SCENARIO */}
           {activeTab === 'seir' && (
             <section className="panel">
@@ -1636,5 +1640,165 @@ export default function App() {
         )}
       </div>
     </>
+  );
+}
+
+
+/* ------------------------------------------------------------------ *
+ *  PanelScorer — the multi-virus generalist (weights_panel.npz).
+ *  Self-contained: owns its state and talks to /panel/* endpoints.
+ *  Pick virus+protein -> site (wildtype shown) -> new residue -> score.
+ *  Only the 17 structure-verified proteins are offered, at covered sites.
+ * ------------------------------------------------------------------ */
+const AA_LIST = 'ACDEFGHIKLMNPQRSTVWY'.split('');
+
+function PanelScorer({ API }) {
+  const [viruses, setViruses] = React.useState(null);  // [{virus, assays:[{id,display,n_sites}]}]
+  const [assay, setAssay] = React.useState('');
+  const [sites, setSites] = React.useState([]);
+  const [site, setSite] = React.useState('');
+  const [mutant, setMutant] = React.useState('');
+  const [result, setResult] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  React.useEffect(() => {
+    let live = true;
+    fetch(`${API}/panel/catalog`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`catalog ${r.status}`)))
+      .then(d => { if (live) setViruses(d.viruses); })
+      .catch(e => { if (live) setErr(e.message); });
+    return () => { live = false; };
+  }, [API]);
+
+  React.useEffect(() => {
+    setSites([]); setSite(''); setMutant(''); setResult(null);
+    if (!assay) return;
+    let live = true;
+    fetch(`${API}/panel/sites?protein=${encodeURIComponent(assay)}`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`sites ${r.status}`)))
+      .then(d => { if (live) setSites(d.sites); })
+      .catch(e => { if (live) setErr(e.message); });
+    return () => { live = false; };
+  }, [assay, API]);
+
+  const wtAt = (s) => (sites.find(x => String(x.site) === String(s)) || {}).wildtype;
+  const score = async () => {
+    setBusy(true); setErr(null); setResult(null);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      const r = await fetch(`${API}/panel/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ protein: assay, site: Number(site), mutant }),
+        signal: ctrl.signal,
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || `Error ${r.status}`);
+      setResult(await r.json());
+    } catch (e) {
+      setErr(e.name === 'AbortError' ? 'Request timed out (20s).' : e.message);
+    } finally { clearTimeout(timer); setBusy(false); }
+  };
+
+  const wt = wtAt(site);
+  const canScore = assay && site && mutant && mutant !== wt && !busy;
+
+  return (
+    <section className="panel">
+      <h2>Other viruses</h2>
+      <p className="section-lede">
+        The same quantum model, trained across 17 viral proteins from 12 organisms
+        (influenza, HIV-1, dengue, coxsackievirus and more) in the ProteinGym deep
+        mutational scanning benchmark. Pick a protein, a site, and a new amino acid
+        to score how likely the substitution is to keep the protein functional.
+        This is the cross-virus generalist — distinct from the SARS-CoV-2 model on
+        the other tabs — and it only offers proteins whose structure we verified.
+      </p>
+
+      {viruses === null && !err && <p className="small">Loading catalogue…</p>}
+      {err && <p className="small" style={{ color: 'crimson' }}>Couldn’t reach the panel model: {err}</p>}
+
+      {viruses && (
+        <div className="stack" style={{ gap: '1rem', marginTop: '1rem' }}>
+          <label className="small">
+            <div><b>Virus &amp; protein</b></div>
+            <select value={assay} onChange={e => setAssay(e.target.value)}
+                    style={{ width: '100%', padding: '0.5rem', marginTop: '0.3rem' }}>
+              <option value="">— select —</option>
+              {viruses.map(g => (
+                <optgroup key={g.virus} label={g.virus}>
+                  {g.assays.map(a => (
+                    <option key={a.id} value={a.id}>{a.display} · {a.n_sites} sites</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+
+          <div className="lanes" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <label className="small" style={{ flex: '1 1 180px' }}>
+              <div><b>Site</b> (wildtype shown)</div>
+              <select value={site} onChange={e => { setSite(e.target.value); setMutant(''); setResult(null); }}
+                      disabled={!sites.length}
+                      style={{ width: '100%', padding: '0.5rem', marginTop: '0.3rem' }}>
+                <option value="">— select —</option>
+                {sites.map(s => (
+                  <option key={s.site} value={s.site}>{s.wildtype}{s.site}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="small" style={{ flex: '1 1 180px' }}>
+              <div><b>New residue</b></div>
+              <select value={mutant} onChange={e => { setMutant(e.target.value); setResult(null); }}
+                      disabled={!site}
+                      style={{ width: '100%', padding: '0.5rem', marginTop: '0.3rem' }}>
+                <option value="">— select —</option>
+                {AA_LIST.filter(a => a !== wt).map(a => (
+                  <option key={a} value={a}>{wt}{site} → {a}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div>
+            <button className="btn" onClick={score} disabled={!canScore}
+                    style={{ padding: '0.55rem 1.4rem' }}>
+              {busy ? 'Scoring…' : 'Score substitution'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div className="sheet" style={{ marginTop: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+            <b className="mono" style={{ fontSize: 'var(--t-lg)' }}>
+              {result.virus} · {result.mutation}
+            </b>
+            <span className="mono" style={{ fontSize: 'var(--t-xl)' }}>
+              {result.score.toFixed(3)}
+            </span>
+          </div>
+          <p className="small" style={{ marginTop: '0.4rem' }}>
+            {result.interpretation}. Residue burial (contacts within 10 Å): {result.burial_cn10}.
+            Scored on {result.n_qubits} qubits, {result.n_parameters} parameters.
+          </p>
+          <div style={{ marginTop: '1rem' }}>
+            <div className="small"><b>Measured quantum state</b> — {result.state_distribution.length} basis outcomes</div>
+            {result.state_distribution.map(b => (
+              <div key={b.state} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.2rem 0' }}>
+                <span className="mono small" style={{ width: '4ch' }}>{b.state}</span>
+                <div style={{ flex: 1, background: 'rgba(127,127,127,0.15)', borderRadius: 4 }}>
+                  <div style={{ width: `${b.probability}%`, minWidth: 2, height: 14, background: 'var(--assay)', borderRadius: 4 }} />
+                </div>
+                <span className="mono small" style={{ width: '5ch', textAlign: 'right' }}>{b.probability}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
