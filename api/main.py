@@ -91,6 +91,13 @@ async def lifespan(app: FastAPI):
         print("         Run `python train_vqc.py --data <csv>` and redeploy.")
     else:
         print(f"Loaded trained VQC: {engine.metadata.get('data_source', 'unknown source')}")
+
+    # Seeds from the committed cache, then refreshes in the background if it
+    # has gone stale. Never blocks startup, never blocks a request.
+    try:
+        sentinel_mod.start_auto_refresh()
+    except Exception as exc:
+        print(f"[sentinel] auto-refresh could not start: {type(exc).__name__}: {exc}")
     yield
 
 
@@ -158,7 +165,8 @@ def health_check():
         "featuriser": "physicochemical-v1",
         "copilot_enabled": bool(os.getenv("GEMINI_API_KEY")),
         "vqe_available": vqe_mod.available(),
-        "sentinel_cached_at": sentinel_mod.load_cache().get("fetched_at"),
+        "sentinel_cached_at": sentinel_mod.current().get("fetched_at"),
+        "sentinel": sentinel_mod.status(),
     }
 
 
@@ -351,41 +359,38 @@ def seir(req: SeirRequest):
 
 @app.get("/sentinel")
 def sentinel_feed():
-    """Cached surveillance feed: recently deposited SARS-CoV-2 spikes, with
-    their RBD substitutions scored by the trained VQC.
+    """Surveillance feed: recently deposited SARS-CoV-2 spikes, with their RBD
+    substitutions scored by the trained VQC.
 
-    Cached deliberately — see sentinel.py. The fetch timestamp is returned so
-    the UI can show that this is not live data.
+    Always answers immediately from memory. A stale cache is refreshed on a
+    background thread (see sentinel.py), so the fetch timestamp moves on its
+    own without a page load ever waiting on NCBI.
     """
-    cache = sentinel_mod.load_cache()
+    cache = sentinel_mod.current()
     if not cache:
         raise HTTPException(
             503,
             "No sentinel cache. Run `python sentinel.py` to build it, then commit "
             "sentinel_cache.json.",
         )
-    return cache
+    if sentinel_mod.is_stale(cache):
+        sentinel_mod.refresh_async()          # returns at once; serves stale meanwhile
+    return {**cache, "feed_status": sentinel_mod.status()}
 
 
 @app.post("/sentinel/refresh")
 def sentinel_refresh():
-    """Re-query NCBI and rebuild the cache.
+    """Ask for a re-query of NCBI. Returns straight away.
 
-    Disabled in production by default: Render's filesystem is ephemeral, so a
-    refresh there is lost on restart. Build the cache locally and commit it.
-    Set ALLOW_SENTINEL_REFRESH=1 to enable.
+    The work happens on a background thread, so this never holds a request
+    open for the length of an NCBI round trip. Poll /sentinel for the result:
+    feed_status.refreshing tells you whether one is still in flight. Set
+    ALLOW_SENTINEL_REFRESH=0 to disable it on a deployment.
     """
-    if os.getenv("ALLOW_SENTINEL_REFRESH") != "1":
-        raise HTTPException(
-            403,
-            "Refresh is disabled. The cache is built locally with "
-            "`python sentinel.py` and committed, because this host's filesystem "
-            "is ephemeral. Set ALLOW_SENTINEL_REFRESH=1 to override.",
-        )
-    try:
-        return sentinel_mod.refresh()
-    except RuntimeError as exc:
-        raise HTTPException(503, str(exc))
+    if os.getenv("ALLOW_SENTINEL_REFRESH", "1") == "0":
+        raise HTTPException(403, "Refresh is disabled on this deployment.")
+    outcome = sentinel_mod.refresh_async()
+    return {**outcome, "feed_status": sentinel_mod.status()}
 
 
 @app.get("/vqe/geometries")
