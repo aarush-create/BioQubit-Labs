@@ -1926,9 +1926,19 @@ function StructureViewer({ dmsId, site, virus }) {
           viewer.addStyle({ resi: Number(site) },
             { sphere: { colorscheme: 'magentaCarbon', scale: 0.3 } });
         }
-        viewer.zoomTo();
-        viewer.render();
-        viewer.resize();
+        /* Frame the whole fold with a consistent margin — neither cropped nor
+           tiny. Resize first so the fit uses the real canvas size, then re-fit
+           on the next frame in case the layout had not settled yet. */
+        const fit = () => {
+          if (!live || !viewer) return;
+          viewer.resize();
+          viewer.zoomTo();
+          viewer.zoom(0.85);   // pull back ~15% so it sits comfortably in the panel
+          viewer.render();
+        };
+        fit();
+        requestAnimationFrame(fit);
+        setTimeout(fit, 150);
         setState('ready');
       })
       .catch(() => { if (live) setState('error'); });
@@ -1953,7 +1963,7 @@ function StructureViewer({ dmsId, site, virus }) {
   return (
     <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
       <div ref={holder}
-           style={{ position: 'relative', width: '100%', height: 'clamp(240px, 62vw, 320px)' }} />
+           style={{ position: 'relative', width: '100%', height: 'clamp(300px, 68vw, 440px)' }} />
       <div className="figure-cap" style={{ padding: '0.75rem 1rem', marginTop: 0 }}>
         <b>AlphaFold2 model</b> (ProteinGym) of {virus} — mutated position{' '}
         <span className="mono">{site}</span> highlighted in magenta. A computational prediction, not
