@@ -683,7 +683,7 @@ export default function App() {
 
             <div className="lanes" style={{ marginTop: '1.25rem' }}>
               {Object.entries({
-                'VQC (ours, 4 qubits)': metrics.vqc?.roc_auc,
+                [`VQC (ours, ${metrics.vqc?.n_qubits ?? 2} qubits)`]: metrics.vqc?.roc_auc,
                 ...Object.fromEntries(Object.entries(metrics.classical_baselines_same_features || {})
                   .map(([k, v]) => [BASELINE_NAME[k] || k.replace(/_/g, ' '), v.roc_auc]))
               })
@@ -803,7 +803,7 @@ export default function App() {
         {/* ------------------------------------------------------------ hero */}
         <section className="stage">
           <div className="shell">
-            <p className="eyebrow">A 4-qubit quantum model that puts virus mutations in test-me-first order</p>
+            <p className="eyebrow">A 2-qubit quantum model that puts virus mutations in test-me-first order</p>
             <h1 className="stage-h1">Which mutation<br />should a lab test first?</h1>
             <p className="stage-sub">
               Labs upload new coronavirus sequences every day, and testing one mutation at the bench

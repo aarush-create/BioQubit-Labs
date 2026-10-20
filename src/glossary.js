@@ -239,7 +239,7 @@ export const GLOSSARY = {
   basisstate: {
     term: 'basis state',
     group: 'quantum',
-    plain: 'One of the plain, definite settings the qubits could be found in — 0000, 0001, and so on. Four qubits have 16 of them, and the quantum state is a blend of all 16 at once. The chart shows how much of the blend sits in each.',
+    plain: 'One of the plain, definite settings the qubits could be found in — 00, 01, and so on. A set of n qubits has 2ⁿ of them (2 qubits give 4, 3 give 8), and the quantum state is a blend of all of them at once. The chart shows how much of the blend sits in each.',
     href: 'https://en.wikipedia.org/wiki/Qubit',
     source: 'Wikipedia',
   },
