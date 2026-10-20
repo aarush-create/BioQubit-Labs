@@ -633,8 +633,8 @@ export default function App() {
   const TABS = [
     { id: 'sentinel', label: 'Surveillance feed' },
     { id: 'genomics', label: 'SARS-CoV-2 variant' },
-    { id: 'vqc', label: 'The circuit' },
     { id: 'panel', label: 'Cross-virus model' },
+    { id: 'vqc', label: 'The circuit' },
     { id: 'seir', label: 'Epidemic scenario' },
     { id: 'vqe', label: 'Quantum chemistry' },
   ];
@@ -712,7 +712,11 @@ export default function App() {
               <b>Why we quote this and not accuracy.</b> 68% of the mutations in this data still
               bind, so a model that simply answered "yes, it binds" every single time would already
               look 68% accurate while being completely useless. ROC-AUC cannot be gamed that way. On
-              it, our quantum model comes fourth of five. We print that gap rather than bury it.
+              it, our quantum model comes fourth of five here — but it reaches that on just{' '}
+              {metrics.vqc?.n_qubits} qubits and {metrics.vqc?.n_parameters} parameters, the same
+              accuracy as our earlier four-qubit model at half the width. Our cross-virus model (the
+              Cross-virus tab) is level with all three classical methods across 12 organisms. We
+              print the gap rather than bury it.
             </p>
 
             <dl className="facts" style={{ marginTop: '1rem' }}>
@@ -743,20 +747,24 @@ export default function App() {
               Which mutation should a lab test first?
             </h2>
             <p>
-              Labs around the world upload new coronavirus sequences every day. Each one carries a
+              Labs around the world upload new viral sequences every day. Each one carries a
               handful of small changes, and somebody has to decide which of those changes are worth
               testing. Testing a single one at a lab bench takes two to six weeks.
             </p>
             <p>
-              Q-VIRA looks at each change and predicts one thing: can the virus still grab{' '}
-              <Term id="ace2">ACE2</Term>, the protein on a human cell it has to hold on to in order
-              to get in? It then puts the changes in order, so the most suspicious are tested first.
-              It gives a to-do list, not a diagnosis.
+              Q-VIRA scores each change and puts them in order, so the most suspicious are tested
+              first — a to-do list, not a diagnosis. Two trained quantum models do the scoring: a{' '}
+              <b>2-qubit SARS-CoV-2 model</b> that asks whether the virus can still grab{' '}
+              <Term id="ace2">ACE2</Term>, the protein on a human cell it holds on to, and a{' '}
+              <b>cross-virus model</b> that extends the same idea across 12 other viral organisms,
+              from influenza to HIV.
             </p>
             <p className="note is-flag" style={{ margin: '1.25rem 0' }}>
               <b>What this is not.</b> A research project, not a medical or public-health tool. We
-              are not claiming that quantum computers do this better — three ordinary, non-quantum
-              methods beat our quantum one on the same data, and the model card shows those numbers.
+              do not claim a quantum advantage: on raw accuracy ordinary non-quantum methods match
+              or beat us, and the model card shows every number. What we did measure is that the
+              SARS-CoV-2 model reaches its accuracy on just two qubits, and the cross-virus model
+              holds its own across a dozen organisms.
             </p>
             <button className="btn" onClick={() => setShowWelcome(false)}>Open the dashboard</button>
           </div>
@@ -1867,7 +1875,7 @@ function PanelScorer({ API }) {
               <p className="small">
                 The measured quantum state of the {result.n_qubits}-qubit circuit for this
                 substitution — the real |ψ|² the readout consumes, across {result.state_distribution.length}{' '}
-                <Term id="basis state">basis outcomes</Term>. Six residue features are encoded two per
+                <Term id="basisstate">basis outcomes</Term>. Six residue features are encoded two per
                 qubit (dense encoding), re-uploaded before each of six entangling layers.
               </p>
               <div style={{ marginTop: '0.8rem' }}>
