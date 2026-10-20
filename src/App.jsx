@@ -48,6 +48,46 @@ const viewerSrc = (pdb, theme, full) =>
   + `&showcommand=0${full ? '' : '&showmenu=0'}&showtitle=0`
   + (theme === 'dark' ? '&bkgdcolor=black' : '');
 
+/* iCn3D can load an AlphaFold predicted model straight from its UniProt
+   accession (afid=). We use this for the cross-virus proteins, whose folds we
+   already use to compute the burial feature — clearly labelled as predicted,
+   unlike the one experimentally-solved structure (6M0J) on the SARS tab. */
+const viewerAf = (acc, theme, full) =>
+  `https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?afid=${acc}`
+  + `&showcommand=0${full ? '' : '&showmenu=0'}&showtitle=0`
+  + (theme === 'dark' ? '&bkgdcolor=black' : '');
+
+/* Per-protein structure overrides for the cross-virus panel, keyed by the
+   ProteinGym DMS_id. Proteins whose id already *is* a UniProt accession
+   (influenza HA, HIV Env) resolve automatically below; the rest use a UniProt
+   mnemonic and need their accession filled in here to light up — e.g.
+   'PA_I34A1_Wu_2015': { uniprot: 'P03433' }. Add { pdb: '6xyz' } to prefer an
+   experimental structure instead. */
+const PANEL_STRUCT = {
+  "ENV_HV1B9_DuenasDecamp_2016": { uniprot: "Q73372" },
+  "ENV_HV1BR_Haddox_2016": { uniprot: "P03377" },
+  "NCAP_I34A1_Doud_2015": { uniprot: "P03466" },
+  "NRAM_I33A0_Jiang_2016": { uniprot: "P03470" },
+  "PA_I34A1_Wu_2015": { uniprot: "P03433" },
+  "POLG_CXB3N_Mattenberger_2021": { uniprot: "P03313" },
+  "POLG_DEN26_Suphatrakul_2023": { uniprot: "P29990" },
+  "RDRP_I33A0_Li_2023": { uniprot: "P03430" },
+  "REV_HV1H2_Fernandes_2016": { uniprot: "P04618" },
+  "TAT_HV1BR_Fernandes_2016": { uniprot: "P04610" },
+};
+function panelStructFor(dmsId) {
+  if (!dmsId) return null;
+  const o = PANEL_STRUCT[dmsId];
+  if (o && (o.uniprot || o.pdb)) return o;
+  /* The DMS_id prefix is a UniProt accession for several proteins (6 or 10
+     chars, letter-led, containing a digit); use it as the AlphaFold id. */
+  const tok = String(dmsId).split('_')[0];
+  if (/\d/.test(tok) && (/^[A-Z][A-Z0-9]{5}$/.test(tok) || /^[A-Z0-9]{10}$/.test(tok))) {
+    return { uniprot: tok };
+  }
+  return null;
+}
+
 /* The backend's keys are snake_case identifiers; these are what a reader
    should see on the model card. */
 const BASELINE_NAME = {
@@ -350,6 +390,28 @@ export default function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState('sentinel');
+
+  /* Deep-link the active tab through the URL hash, so a judge can link to a
+     specific tab and a refresh does not snap back to the feed. */
+  useEffect(() => {
+    const ids = ['sentinel', 'genomics', 'panel', 'vqc', 'seir', 'vqe', 'experiments'];
+    const read = () => {
+      const h = window.location.hash.replace('#', '');
+      if (ids.includes(h)) setActiveTab(h);
+    };
+    read();
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
+  }, []);
+  useEffect(() => {
+    if (window.location.hash.replace('#', '') !== activeTab) {
+      try { window.history.replaceState(null, '', `#${activeTab}`); } catch { /* ignore */ }
+    }
+  }, [activeTab]);
+
+  /* Surveillance feed: sort + weak-evidence filter (see the ranked list). */
+  const [feedSort, setFeedSort] = useState('score');
+  const [feedHideWeak, setFeedHideWeak] = useState(false);
   const [loading, setLoading] = useState(false);
   const [threatScore, setThreatScore] = useState(0.45);
   const [r0, setR0] = useState(1.2);
@@ -904,6 +966,15 @@ export default function App() {
         <section className="shell hero" id="instrument">
 
           <div className="readout">
+            {result && (
+              <div style={{ marginBottom: '0.6rem' }}>
+                <span style={{ display: 'inline-block', padding: '0.15rem 0.6rem', borderRadius: 999,
+                               border: '1px solid rgba(127,127,127,0.35)', fontSize: '0.75rem',
+                               fontWeight: 600, letterSpacing: '0.02em' }}>
+                  {panelMode ? 'Cross-virus model · 3 qubits' : 'SARS-CoV-2 model · 2 qubits'}
+                </span>
+              </div>
+            )}
             <div className="readout-top">
               {result ? (
                 <>
@@ -991,9 +1062,12 @@ export default function App() {
 
         {/* ------------------------------------------------------------ tabs */}
         <div className="shell print-hidden" style={{ marginTop: '2.25rem' }}>
-          <div className="rail" role="tablist">
+          <div className="rail" role="tablist"
+               style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto',
+                        WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', scrollSnapType: 'x proximity' }}>
             {TABS.map(t => (
               <button key={t.id} role="tab" aria-selected={activeTab === t.id}
+                      style={{ flex: '0 0 auto', whiteSpace: 'nowrap', scrollSnapAlign: 'start' }}
                       onClick={() => setActiveTab(t.id)}>{t.label}</button>
             ))}
           </div>
@@ -1094,8 +1168,32 @@ export default function App() {
                     evidence.
                   </p>
 
+                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center',
+                                margin: '0 0 1rem' }}>
+                    <label className="small" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                      Sort
+                      <select value={feedSort} onChange={e => setFeedSort(e.target.value)}
+                              style={{ padding: '0.25rem 0.4rem' }}>
+                        <option value="score">Highest unique-change score</option>
+                        <option value="default">As returned (ranked)</option>
+                      </select>
+                    </label>
+                    <label className="small" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                      <input type="checkbox" checked={feedHideWeak}
+                             onChange={e => setFeedHideWeak(e.target.checked)} />
+                      Hide multi-mutation (weak-evidence) rows
+                    </label>
+                  </div>
+
                   <div className="lanes">
-                    {sentinel.records.filter(r => r.max_score !== null).map(r => (
+                    {sentinel.records
+                      .filter(r => r.max_score !== null)
+                      .filter(r => !feedHideWeak || !r.high_divergence)
+                      .slice()
+                      .sort((a, b) => feedSort === 'score'
+                        ? ((b.top_distinguishing_score ?? -1) - (a.top_distinguishing_score ?? -1))
+                        : 0)
+                      .map(r => (
                       <article key={r.accession} className="lane">
                         <div>
                           <div className="lane-acc">{r.accession}</div>
@@ -1386,8 +1484,16 @@ export default function App() {
 
               <div className="figure">
                 {quantumWaveformData.length === 0 ? (
-                  <div style={{ height: 'clamp(230px, 62vw, 320px)', display: 'grid', placeItems: 'center' }}>
-                    <span className="muted">Score a mutation to see the quantum state.</span>
+                  <div style={{ height: 'clamp(230px, 62vw, 320px)', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '1rem' }}>
+                    <div>
+                      <span className="muted">
+                        {waking ? `Waking the server (~${wakeSeconds}s)…` : 'Score a mutation to see the quantum state.'}
+                      </span>
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '0.8rem' }}>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('genomics')}>Score a SARS-CoV-2 variant</button>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('panel')}>Score a cross-virus variant</button>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div style={{ width: '100%', height: 'clamp(250px, 64vw, 340px)', minWidth: 0 }}>
@@ -1424,7 +1530,7 @@ export default function App() {
           )}
 
           {/* ===================================== 3b. OTHER VIRUSES (panel) */}
-          {activeTab === 'panel' && <PanelScorer API={API} onScore={applyPanelScore} onJump={setActiveTab} />}
+          {activeTab === 'panel' && <PanelScorer API={API} theme={theme} onScore={applyPanelScore} onJump={setActiveTab} />}
 
           {/* ================================================ 4. SCENARIO */}
           {activeTab === 'seir' && (
@@ -1486,7 +1592,13 @@ export default function App() {
                   </section>
                 </>
               ) : (
-                <p className="muted">Score a mutation to run the scenario.</p>
+                <div className="muted">
+                  {waking ? `Waking the server (~${wakeSeconds}s)…` : 'Score a mutation to run the scenario.'}
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('genomics')}>Score a SARS-CoV-2 variant</button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('panel')}>Score a cross-virus variant</button>
+                  </div>
+                </div>
               )}
             </section>
           )}
@@ -1672,12 +1784,14 @@ export default function App() {
         <footer className="print-hidden" style={{ borderTop: `1px solid ${C.rule}` }}>
           <div className="shell" style={{ padding: '1.5rem var(--gut) 3rem' }}>
             <p className="small" style={{ maxWidth: '72ch' }}>
-              BioQubit Labs · Q-Hack India 2026, Quantum Biotech &amp; Chemistry. Trained on{' '}
+              BioQubit Labs · Q-Hack India 2026, Quantum Biotech &amp; Chemistry. Two trained quantum
+              models: a SARS-CoV-2 specialist trained on{' '}
               <Term id="starr">Starr et al. (2020)</Term>, a{' '}
               <Term id="dms">deep mutational scanning</Term> study of the part of the SARS-CoV-2
-              spike that touches human cells; distances measured from{' '}
-              <Term id="pdb">PDB</Term> entry 6M0J. A research prototype, not a clinical or
-              public-health tool.
+              spike that touches human cells (distances measured from <Term id="pdb">PDB</Term> entry
+              6M0J), and a cross-virus generalist trained on 17 viral proteins across 12 organisms
+              from the ProteinGym benchmark. A research prototype, not a clinical or public-health
+              tool.
             </p>
             <Glossary />
           </div>
@@ -1772,7 +1886,7 @@ function MiniLine({ series, width = 460, height = 150, xLabel, yLabel, fmtY }) {
  *  Only the 17 structure-verified proteins are offered.
  * ------------------------------------------------------------------ */
 const AA_LIST = 'ACDEFGHIKLMNPQRSTVWY'.split('');
-function PanelScorer({ API, onScore, onJump }) {
+function PanelScorer({ API, theme, onScore, onJump }) {
   const [viruses, setViruses] = React.useState(null);
   const [assay, setAssay] = React.useState('');
   const [sites, setSites] = React.useState([]);
@@ -1923,6 +2037,48 @@ function PanelScorer({ API, onScore, onJump }) {
               Quantum chemistry →
             </button>
           </div>
+
+          <div style={{ marginTop: '1.25rem' }}>
+            <h4 style={{ margin: '0 0 0.5rem' }}>Structure</h4>
+            {(() => {
+              const st = panelStructFor(result.protein);
+              if (!st) {
+                return (
+                  <p className="small" style={{ opacity: 0.65 }}>
+                    A 3D model for this protein is not mapped yet. Proteins whose ProteinGym id is a
+                    UniProt accession show their AlphaFold fold automatically; this one is named by a
+                    UniProt mnemonic, so its accession needs adding to{' '}
+                    <span className="mono">PANEL_STRUCT</span> to light up.
+                  </p>
+                );
+              }
+              const src = st.pdb ? viewerSrc(st.pdb, theme, false) : viewerAf(st.uniprot, theme, false);
+              return (
+                <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', height: 'clamp(220px, 60vw, 300px)', overflow: 'hidden' }}>
+                    <iframe
+                      key={`${st.uniprot || st.pdb}-${theme}`}
+                      src={src}
+                      title={`${result.virus} structure`}
+                      style={{ position: 'absolute', border: 0, width: '165%', height: '165%', left: '-32.5%', top: '-32.5%' }}
+                    />
+                  </div>
+                  <div className="figure-cap" style={{ padding: '0.75rem 1rem', marginTop: 0 }}>
+                    {st.pdb ? (
+                      <>Experimental structure <span className="mono">{String(st.pdb).toUpperCase()}</span> for {result.virus}.</>
+                    ) : (
+                      <>
+                        <b>AlphaFold-predicted</b> model (<span className="mono">{st.uniprot}</span>) of{' '}
+                        {result.virus} — mutated position {result.site}. This is a computational
+                        prediction, not an experimentally-solved structure like 6M0J on the SARS-CoV-2
+                        tab; it is the same fold the burial feature is measured from.
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </div>
       )}
     </section>
@@ -1986,8 +2142,22 @@ function Experiments({ metrics }) {
         </p>
       </div>
 
+      <nav style={{ position: 'sticky', top: 'var(--header-h, 0px)', zIndex: 5,
+                    display: 'flex', gap: '0.5rem', flexWrap: 'wrap', padding: '0.6rem 0',
+                    marginBottom: '0.5rem', borderBottom: '1px solid rgba(127,127,127,0.2)',
+                    background: 'rgba(128,128,128,0.08)', backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)' }}>
+        {[['exp-models', 'Models'], ['exp-baselines', 'Baselines'],
+          ['exp-round2', 'Round 2'], ['exp-round1', 'Round 1']].map(([id, label]) => (
+          <button key={id} type="button" className="btn btn-ghost btn-sm"
+                  onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+            {label}
+          </button>
+        ))}
+      </nav>
+
       {/* ---- the two models ---- */}
-      <section className="section">
+      <section className="section" id="exp-models">
         <h3>The two shipped models</h3>
         <p className="section-lede">
           They answer different questions on different data, so their scores are not comparable: the
@@ -2008,7 +2178,7 @@ function Experiments({ metrics }) {
       </section>
 
       {/* ---- Model 1 baselines ---- */}
-      <section className="section">
+      <section className="section" id="exp-baselines">
         <h3>Model 1 — SARS-CoV-2, versus classical baselines</h3>
         <p className="section-lede">
           Same four features, same site-grouped split, same 946 held-out mutations. We report the gap
@@ -2061,7 +2231,7 @@ function Experiments({ metrics }) {
       </section>
 
       {/* ---- Round 2 experiments ---- */}
-      <section className="section">
+      <section className="section" id="exp-round2">
         <h3>Round 2 experiments</h3>
 
         <div className="sheet" style={{ marginBottom: '1rem' }}>
@@ -2153,7 +2323,7 @@ function Experiments({ metrics }) {
       </section>
 
       {/* ---- Round 1 ablations ---- */}
-      <section className="section">
+      <section className="section" id="exp-round1">
         <h3>Round 1 ablations (what chose the design)</h3>
         <p className="section-lede">Still valid; the shipped circuit has since moved to a dense encoding, but the feature conclusions carry over.</p>
 
