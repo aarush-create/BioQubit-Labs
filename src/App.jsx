@@ -1879,10 +1879,69 @@ function MiniLine({ series, width = 460, height = 150, xLabel, yLabel, fmtY }) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  StructureViewer — the cross-virus protein's 3D fold. It asks the
+ *  AlphaFold database whether a model exists BEFORE embedding iCn3D, so a
+ *  protein with no public AF model shows a clean note instead of iCn3D's
+ *  blocking "ID not found" alert. AFDB serves open CORS (iCn3D itself
+ *  loads its files cross-origin), so the check runs from the app's origin.
+ * ------------------------------------------------------------------ */
+function StructureViewer({ dmsId, site, virus, theme }) {
+  const st = panelStructFor(dmsId);
+  const key = st ? (st.uniprot || st.pdb) : null;
+  const [status, setStatus] = React.useState('checking');
+  React.useEffect(() => {
+    if (!st) { setStatus('none'); return; }
+    if (st.pdb) { setStatus('ok'); return; }           // experimental PDB: trust it
+    let live = true;
+    setStatus('checking');
+    fetch(`https://alphafold.ebi.ac.uk/api/prediction/${st.uniprot}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (live) setStatus(Array.isArray(d) && d.length ? 'ok' : 'missing'); })
+      .catch(() => { if (live) setStatus('missing'); });
+    return () => { live = false; };
+  }, [key]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!st || status === 'none') {
+    return <p className="small" style={{ opacity: 0.65 }}>A 3D model for this protein is not mapped.</p>;
+  }
+  if (status === 'checking') {
+    return <p className="small" style={{ opacity: 0.65 }}>Looking for a 3D model…</p>;
+  }
+  if (status === 'missing') {
+    return (
+      <p className="small" style={{ opacity: 0.65 }}>
+        No public AlphaFold model is available for {virus}{' '}
+        (<span className="mono">{st.uniprot}</span>). The burial feature still uses this protein's
+        predicted fold — it just isn't in the AlphaFold database for web display.
+      </p>
+    );
+  }
+  const src = st.pdb ? viewerSrc(st.pdb, theme, false) : viewerAf(st.uniprot, theme, false);
+  return (
+    <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ position: 'relative', height: 'clamp(220px, 60vw, 300px)', overflow: 'hidden' }}>
+        <iframe key={`${key}-${theme}`} src={src} title={`${virus} structure`}
+                style={{ position: 'absolute', border: 0, width: '165%', height: '165%', left: '-32.5%', top: '-32.5%' }} />
+      </div>
+      <div className="figure-cap" style={{ padding: '0.75rem 1rem', marginTop: 0 }}>
+        {st.pdb ? (
+          <>Experimental structure <span className="mono">{String(st.pdb).toUpperCase()}</span> for {virus}.</>
+        ) : (
+          <>
+            <b>AlphaFold-predicted</b> model (<span className="mono">{st.uniprot}</span>) of {virus} —
+            mutated position {site}. A computational prediction, not an experimentally-solved structure
+            like 6M0J on the SARS-CoV-2 tab; the same fold the burial feature is measured from.
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  *  PanelScorer — the cross-virus generalist (weights_panel.npz).
- *  Pick virus+protein -> site -> residue -> score, then explore the
- *  same substitution across four views: score, circuit, epidemic
- *  scenario, and the shared H2 quantum-chemistry benchmark.
+ *  Pick virus+protein -> site -> residue -> score; the result drives the
+ *  main Circuit / Epidemic / Chemistry tabs and shows the protein's fold.
  *  Only the 17 structure-verified proteins are offered.
  * ------------------------------------------------------------------ */
 const AA_LIST = 'ACDEFGHIKLMNPQRSTVWY'.split('');
@@ -2040,44 +2099,8 @@ function PanelScorer({ API, theme, onScore, onJump }) {
 
           <div style={{ marginTop: '1.25rem' }}>
             <h4 style={{ margin: '0 0 0.5rem' }}>Structure</h4>
-            {(() => {
-              const st = panelStructFor(result.protein);
-              if (!st) {
-                return (
-                  <p className="small" style={{ opacity: 0.65 }}>
-                    A 3D model for this protein is not mapped yet. Proteins whose ProteinGym id is a
-                    UniProt accession show their AlphaFold fold automatically; this one is named by a
-                    UniProt mnemonic, so its accession needs adding to{' '}
-                    <span className="mono">PANEL_STRUCT</span> to light up.
-                  </p>
-                );
-              }
-              const src = st.pdb ? viewerSrc(st.pdb, theme, false) : viewerAf(st.uniprot, theme, false);
-              return (
-                <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
-                  <div style={{ position: 'relative', height: 'clamp(220px, 60vw, 300px)', overflow: 'hidden' }}>
-                    <iframe
-                      key={`${st.uniprot || st.pdb}-${theme}`}
-                      src={src}
-                      title={`${result.virus} structure`}
-                      style={{ position: 'absolute', border: 0, width: '165%', height: '165%', left: '-32.5%', top: '-32.5%' }}
-                    />
-                  </div>
-                  <div className="figure-cap" style={{ padding: '0.75rem 1rem', marginTop: 0 }}>
-                    {st.pdb ? (
-                      <>Experimental structure <span className="mono">{String(st.pdb).toUpperCase()}</span> for {result.virus}.</>
-                    ) : (
-                      <>
-                        <b>AlphaFold-predicted</b> model (<span className="mono">{st.uniprot}</span>) of{' '}
-                        {result.virus} — mutated position {result.site}. This is a computational
-                        prediction, not an experimentally-solved structure like 6M0J on the SARS-CoV-2
-                        tab; it is the same fold the burial feature is measured from.
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
+            <StructureViewer dmsId={result.protein} site={result.site}
+                             virus={result.virus} theme={theme} />
           </div>
         </div>
       )}
