@@ -1314,6 +1314,20 @@ export default function App() {
                     </p>
                   )}
 
+                  {result && !panelMode && (
+                    <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('vqc')}>
+                        See the circuit →
+                      </button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('seir')}>
+                        Epidemic scenario →
+                      </button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('vqe')}>
+                        Quantum chemistry →
+                      </button>
+                    </div>
+                  )}
+
                   {refList.some(r => !r.in_distribution) && (
                     <p className="note">
                       {refList.filter(r => !r.in_distribution).length} other viruses are loaded —
@@ -2014,6 +2028,18 @@ function PanelScorer({ API, theme, onScore, onJump }) {
   // R0 is a SCENARIO parameter mapped from the score, never a prediction.
   const scenarioR0 = result ? 0.8 + result.score * 3.2 : null;
 
+  // The six descriptors this mutation is reduced to, normalised 0–100 for the
+  // radar — the same features the cross-virus circuit reads.
+  const pf = result && result.features;
+  const panelFeatureData = pf ? [
+    { subject: 'How odd the swap is', A: Math.max(0, Math.min(100, ((pf.blosum62 + 4) / 15) * 100)) },
+    { subject: 'Original size', A: Math.max(0, Math.min(100, ((pf.wt_volume - 60) / 168) * 100)) },
+    { subject: 'Change in size', A: Math.max(0, Math.min(100, ((pf.delta_volume + 170) / 340) * 100)) },
+    { subject: 'Water-liking (orig.)', A: Math.max(0, Math.min(100, ((pf.wt_hydropathy + 4.5) / 9) * 100)) },
+    { subject: 'Change in water-liking', A: Math.max(0, Math.min(100, ((pf.delta_hydropathy + 9) / 18) * 100)) },
+    { subject: 'How buried it sits', A: Math.max(0, Math.min(100, (pf.burial / 40) * 100)) },
+  ] : [];
+
   const wtAt = (s) => (sites.find(x => String(x.site) === String(s)) || {}).wildtype;
   const wt = wtAt(site);
 
@@ -2114,6 +2140,27 @@ function PanelScorer({ API, theme, onScore, onJump }) {
             protein functional, so it is the kind of change worth characterising first. Residue
             burial (contacts within 10 Å of the mutated site): <b>{result.burial_cn10}</b>.
           </p>
+
+          {panelFeatureData.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <h4 style={{ margin: '0 0 0.3rem' }}>What the model looks at</h4>
+              <p className="small" style={{ opacity: 0.8, margin: 0 }}>
+                The six descriptors this mutation is boiled down to — dense-encoded two per qubit,
+                the same numbers the cross-virus circuit reads.
+              </p>
+              <div style={{ width: '100%', height: 'clamp(230px, 56vw, 300px)', minWidth: 0 }}>
+                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                  <RadarChart cx="50%" cy="50%" outerRadius="68%" data={panelFeatureData}>
+                    <PolarGrid stroke="rgba(127,127,127,0.25)" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: 'currentColor', fontSize: 10, opacity: 0.85 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                    <Radar dataKey="A" stroke="var(--assay)" fill="var(--assay)" fillOpacity={0.22} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
           <p className="small" style={{ opacity: 0.75 }}>
             Scored on {result.n_qubits} qubits, {result.n_parameters} parameters — the cross-virus
             generalist, distinct from the SARS-CoV-2 model. This substitution now drives the sections
