@@ -57,35 +57,20 @@ const viewerAf = (acc, theme, full) =>
   + `&showcommand=0${full ? '' : '&showmenu=0'}&showtitle=0`
   + (theme === 'dark' ? '&bkgdcolor=black' : '');
 
-/* Per-protein structure overrides for the cross-virus panel, keyed by the
-   ProteinGym DMS_id. Proteins whose id already *is* a UniProt accession
-   (influenza HA, HIV Env) resolve automatically below; the rest use a UniProt
-   mnemonic and need their accession filled in here to light up — e.g.
-   'PA_I34A1_Wu_2015': { uniprot: 'P03433' }. Add { pdb: '6xyz' } to prefer an
-   experimental structure instead. */
+/* Per-protein structures for the cross-virus panel, keyed by ProteinGym
+   DMS_id. These are VERIFIED against the AlphaFold database (check_alphafold.py)
+   — only proteins that actually have a public AF model are listed, because
+   AlphaFold DB's coverage of viral proteins is sparse (most of these 17 are not
+   in it). Proteins absent here show a label instead of an empty viewer. Add
+   { pdb: '1abc' } to point one at an experimental PDB structure. */
 const PANEL_STRUCT = {
-  "ENV_HV1B9_DuenasDecamp_2016": { uniprot: "Q73372" },
-  "ENV_HV1BR_Haddox_2016": { uniprot: "P03377" },
-  "NCAP_I34A1_Doud_2015": { uniprot: "P03466" },
-  "NRAM_I33A0_Jiang_2016": { uniprot: "P03470" },
-  "PA_I34A1_Wu_2015": { uniprot: "P03433" },
-  "POLG_CXB3N_Mattenberger_2021": { uniprot: "P03313" },
-  "POLG_DEN26_Suphatrakul_2023": { uniprot: "P29990" },
-  "RDRP_I33A0_Li_2023": { uniprot: "P03430" },
-  "REV_HV1H2_Fernandes_2016": { uniprot: "P04618" },
-  "TAT_HV1BR_Fernandes_2016": { uniprot: "P04610" },
+  "NCAP_I34A1_Doud_2015": { uniprot: "P03466" },   // influenza A nucleoprotein
+  "PA_I34A1_Wu_2015": { uniprot: "P03433" },       // influenza A PA polymerase
 };
 function panelStructFor(dmsId) {
   if (!dmsId) return null;
   const o = PANEL_STRUCT[dmsId];
-  if (o && (o.uniprot || o.pdb)) return o;
-  /* The DMS_id prefix is a UniProt accession for several proteins (6 or 10
-     chars, letter-led, containing a digit); use it as the AlphaFold id. */
-  const tok = String(dmsId).split('_')[0];
-  if (/\d/.test(tok) && (/^[A-Z][A-Z0-9]{5}$/.test(tok) || /^[A-Z0-9]{10}$/.test(tok))) {
-    return { uniprot: tok };
-  }
-  return null;
+  return o && (o.uniprot || o.pdb) ? o : null;
 }
 
 /* The backend's keys are snake_case identifiers; these are what a reader
@@ -1879,60 +1864,101 @@ function MiniLine({ series, width = 460, height = 150, xLabel, yLabel, fmtY }) {
 }
 
 /* ------------------------------------------------------------------ *
- *  StructureViewer — the cross-virus protein's 3D fold. It asks the
- *  AlphaFold database whether a model exists BEFORE embedding iCn3D, so a
- *  protein with no public AF model shows a clean note instead of iCn3D's
- *  blocking "ID not found" alert. AFDB serves open CORS (iCn3D itself
- *  loads its files cross-origin), so the check runs from the app's origin.
+ *  StructureViewer — the cross-virus protein's 3D fold, rendered with
+ *  3Dmol.js from the ProteinGym AlphaFold2 structure this app serves
+ *  (public/structures/, staged by stage_structures.py). These are the
+ *  exact folds the burial feature is computed from, so residue numbering
+ *  matches and the mutated position is highlighted. Loading the file
+ *  same-origin sidesteps the cross-origin limits AlphaFold DB imposes.
  * ------------------------------------------------------------------ */
-function StructureViewer({ dmsId, site, virus, theme }) {
-  const st = panelStructFor(dmsId);
-  const key = st ? (st.uniprot || st.pdb) : null;
-  const [status, setStatus] = React.useState('checking');
-  React.useEffect(() => {
-    if (!st) { setStatus('none'); return; }
-    if (st.pdb) { setStatus('ok'); return; }           // experimental PDB: trust it
-    let live = true;
-    setStatus('checking');
-    fetch(`https://alphafold.ebi.ac.uk/api/prediction/${st.uniprot}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (live) setStatus(Array.isArray(d) && d.length ? 'ok' : 'missing'); })
-      .catch(() => { if (live) setStatus('missing'); });
-    return () => { live = false; };
-  }, [key]);  // eslint-disable-line react-hooks/exhaustive-deps
+let _threeDmol = null;
+function ensure3Dmol() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
+  if (window.$3Dmol) return Promise.resolve(window.$3Dmol);
+  if (_threeDmol) return _threeDmol;
+  _threeDmol = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://3dmol.org/build/3Dmol-min.js';
+    s.async = true;
+    s.onload = () => resolve(window.$3Dmol);
+    s.onerror = () => reject(new Error('3Dmol failed to load'));
+    document.head.appendChild(s);
+  });
+  return _threeDmol;
+}
 
-  if (!st || status === 'none') {
-    return <p className="small" style={{ opacity: 0.65 }}>A 3D model for this protein is not mapped.</p>;
+function StructureViewer({ dmsId, site, virus }) {
+  const [manifest, setManifest] = React.useState(null);   // null while loading
+  const [state, setState] = React.useState('idle');        // idle|loading|ready|error
+  const holder = React.useRef(null);
+
+  React.useEffect(() => {
+    let live = true;
+    fetch('/structures/manifest.json')
+      .then(r => (r.ok ? r.json() : {}))
+      .then(m => { if (live) setManifest(m || {}); })
+      .catch(() => { if (live) setManifest({}); });
+    return () => { live = false; };
+  }, []);
+
+  const file = manifest ? manifest[dmsId] : undefined;
+
+  React.useEffect(() => {
+    if (!file || !holder.current) return;
+    let live = true;
+    let viewer = null;
+    setState('loading');
+    const fmt = /\.(cif|mmcif)$/i.test(file) ? 'mmcif' : 'pdb';
+    ensure3Dmol()
+      .then($3Dmol => fetch(`/structures/${file}`).then(r => {
+        if (!r.ok) throw new Error('structure fetch failed');
+        return r.text();
+      }).then(data => ({ $3Dmol, data })))
+      .then(({ $3Dmol, data }) => {
+        if (!live || !holder.current) return;
+        holder.current.innerHTML = '';
+        viewer = $3Dmol.createViewer(holder.current, { backgroundColor: 'white', backgroundAlpha: 0 });
+        viewer.addModel(data, fmt);
+        viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
+        if (site != null && site !== '') {
+          viewer.addStyle({ resi: Number(site) },
+            { stick: { colorscheme: 'magentaCarbon', radius: 0.35 } });
+          viewer.addStyle({ resi: Number(site) },
+            { sphere: { colorscheme: 'magentaCarbon', scale: 0.3 } });
+        }
+        viewer.zoomTo();
+        viewer.render();
+        viewer.resize();
+        setState('ready');
+      })
+      .catch(() => { if (live) setState('error'); });
+    return () => {
+      live = false;
+      try { if (viewer) viewer.clear(); } catch { /* ignore */ }
+    };
+  }, [file, site]);
+
+  if (manifest === null) {
+    return <p className="small" style={{ opacity: 0.65 }}>Loading structures…</p>;
   }
-  if (status === 'checking') {
-    return <p className="small" style={{ opacity: 0.65 }}>Looking for a 3D model…</p>;
-  }
-  if (status === 'missing') {
+  if (!file) {
     return (
       <p className="small" style={{ opacity: 0.65 }}>
-        No public AlphaFold model is available for {virus}{' '}
-        (<span className="mono">{st.uniprot}</span>). The burial feature still uses this protein's
-        predicted fold — it just isn't in the AlphaFold database for web display.
+        No 3D structure is staged for this protein yet — run{' '}
+        <span className="mono">stage_structures.py</span> and commit{' '}
+        <span className="mono">public/structures/</span>.
       </p>
     );
   }
-  const src = st.pdb ? viewerSrc(st.pdb, theme, false) : viewerAf(st.uniprot, theme, false);
   return (
     <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ position: 'relative', height: 'clamp(220px, 60vw, 300px)', overflow: 'hidden' }}>
-        <iframe key={`${key}-${theme}`} src={src} title={`${virus} structure`}
-                style={{ position: 'absolute', border: 0, width: '165%', height: '165%', left: '-32.5%', top: '-32.5%' }} />
-      </div>
+      <div ref={holder}
+           style={{ position: 'relative', width: '100%', height: 'clamp(240px, 62vw, 320px)' }} />
       <div className="figure-cap" style={{ padding: '0.75rem 1rem', marginTop: 0 }}>
-        {st.pdb ? (
-          <>Experimental structure <span className="mono">{String(st.pdb).toUpperCase()}</span> for {virus}.</>
-        ) : (
-          <>
-            <b>AlphaFold-predicted</b> model (<span className="mono">{st.uniprot}</span>) of {virus} —
-            mutated position {site}. A computational prediction, not an experimentally-solved structure
-            like 6M0J on the SARS-CoV-2 tab; the same fold the burial feature is measured from.
-          </>
-        )}
+        <b>AlphaFold2 model</b> (ProteinGym) of {virus} — mutated position{' '}
+        <span className="mono">{site}</span> highlighted in magenta. A computational prediction, not
+        an experimentally-solved structure like 6M0J on the SARS-CoV-2 tab; the exact fold the burial
+        feature is measured from.{state === 'error' && ' — the viewer could not load this structure.'}
       </div>
     </div>
   );
