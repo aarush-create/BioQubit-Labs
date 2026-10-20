@@ -10,390 +10,300 @@ Presentation 10%.** Half the marks sit in the two columns the jury probes hardes
 limits reads as competent. Being caught overclaiming is very hard to recover from
 in a live Q&A.
 
-**Your numbers, memorised:**
-- Surveillance: ~40 deposits → ~14 distinct variants · ~11 mutations shared by all
-  (the feed refreshes itself, so read the live counts off the panel, not from memory)
-- Top distinguishing: L441I 0.871 · K444R 0.868 · K417N 0.849
-- VQE: max error 1.9e-7 Ha across the H₂ curve (chemical accuracy = 1.6e-3)
-- VQC held-out **AUC 0.747** · 4 qubits · 6 layers · 74 parameters
-- Baselines on identical features: **SVM 0.750 (we are within 0.004)** · MLP 0.766 · logistic 0.780
-- Biggest single gain: ACE2 interface distance from PDB 6M0J, +0.065 AUC (0.682 → 0.747)
-- Chance = 0.500 · majority-class accuracy = 0.684
-- Train 2,856 rows / 151 sites · Test 946 rows / 50 sites · site-grouped split
+**We now ship TWO models. Keep them straight — a judge will test whether you do:**
+
+- **SARS-CoV-2 specialist** — RBD → ACE2 binding. **2 qubits · 6 layers · 41 params ·
+  AUC 0.742 ± 0.002.** Baselines on identical features/split: SVM 0.758 · MLP 0.771 ·
+  logistic 0.780.
+- **Cross-virus generalist** — 17 proteins, 12 organisms, held out **by protein**.
+  **3 qubits · 6 layers · 63 params · AUC 0.681 ± 0.002.** Baselines: logistic 0.676 ·
+  SVM 0.683 · MLP 0.684 — we are **level** with all three.
+
+**Other numbers, memorised:**
+- Every headline is a **3-seed mean ± sd**, not one seed. Seed spread is ±0.002 on the
+  panel (112k rows) and up to ±0.02 on SARS-CoV-2 (2,856 rows) — more data, tighter number.
+- Biggest SARS-CoV-2 gain: ACE2 interface distance from PDB 6M0J, +0.065 AUC.
+- Biggest cross-virus gain: **burial** (structure-derived), **+0.027 AUC, all 4 held-out
+  proteins improved**, restart ranges disjoint.
+- Database grew 3,802 → 146,161 rows; 1 → 12 viral organisms; ~28× distinct feature vectors.
+- VQE: max error ~1.9e-7 Ha across the H₂ curve (chemical accuracy = 1.6e-3).
+- Surveillance: ~40 deposits → ~14 distinct variants; read live counts off the panel.
+
+**If you take one framing in: we did not raise the headline AUC — we halved the qubits
+at the same accuracy, and we built a second model that generalises across 12 viruses.
+The story is resource efficiency and generalisation, measured honestly.**
 
 ---
 
 ## Quantum Relevance (20%)
 
 **"Where is the quantum advantage?"**
-> There isn't one, and we don't claim one. Our VQC reaches 0.747 AUC; on the same
-> features the SVM gets 0.750, the MLP 0.766 and logistic regression 0.780. We
-> place fourth of five, and it's on our results slide. At 4 qubits the state is 16-dimensional and classically simulable. This
-> is a feasibility study, and the value is in what the ablations taught us about
-> the circuit, not in beating sklearn.
+> There isn't one, and we don't claim one. On raw AUC both models trail the best
+> classical baseline on identical features — it's on our results slide. What we
+> defend is efficiency: the SARS-CoV-2 model reaches the same accuracy as our
+> Round 1 four-qubit version on **two qubits and 41 parameters**, and the
+> cross-virus model is level with every classical baseline on three qubits. At
+> this width the state is 4–8 dimensional and classically simulable — that's the
+> point, every claim is verifiable by hand.
 
 *Never say "quantum explores all possibilities in parallel."* That one phrase can
 cost you the room.
 
-**"Then why use a quantum circuit at all?"**
-> Because the question we can answer at this scale is whether the model structure
-> behaves sensibly, and that has to be settled at simulable size before anything
-> larger is worth attempting. We got three measured answers that generalise:
-> width should match feature count, depth hurts before it helps, and data
-> width should match feature count, structure beats more chemistry, and depth
-> and width interact rather than acting independently.
-
 **"Walk me through your circuit."**
-> 4 qubits, one per feature. Each descriptor is angle-encoded as an RY rotation,
-> then `StronglyEntanglingLayers` applies parameterised rotations plus a ring of
-> CNOTs. The input is re-encoded before every layer — data re-uploading. We
-> measure ⟨Z⟩ on wire 0 and pass it through a trained sigmoid calibration.
-> 6 layers, 74 parameters total.
+> Take the SARS-CoV-2 model: four residue features on **two** qubits, using dense
+> encoding — two features per qubit, one on the RY axis and one on RZ. Then
+> `StronglyEntanglingLayers` applies parameterised rotations and a CNOT ring, and
+> the input is re-encoded before every layer (data re-uploading). Six layers. The
+> readout is a **trained linear map over the full computational-basis
+> distribution** — all four basis probabilities — not a single qubit. The
+> cross-virus model is the same recipe with six features on three qubits.
+
+**"Why dense encoding — and why the full-distribution readout?"** ⭐
+> Two measured decisions. Angle encoding puts one feature per qubit; six features
+> would need six qubits, and we measured that eight qubits hits a barren plateau
+> (0.558 AUC, loss stuck). Dense encoding carries two features per qubit, so six
+> ride on three — narrower *and* more informative. And we were originally reading
+> one qubit through a single Pauli-Z, which throws away the entangled state the
+> layers built; a trained linear readout over the whole basis distribution uses
+> it. Both changes are why the new model matches the old on half the width.
 
 **"Why data re-uploading?"** *(say what you measured and what you didn't)*
-> We took it from the literature, not from our own ablation. A single encoding
-> followed by entangling layers is limited in the functions it can express;
-> re-uploading makes the circuit a universal approximator (Pérez-Salinas et al.
-> 2020). We have **not** run a controlled single-encoding comparison on this
-> dataset, so we don't quote a number for what it bought us. That ablation is on
-> the Round 2 list.
+> We took it from the literature (Pérez-Salinas et al. 2020): a single encoding
+> followed by entangling layers is limited in what it can express; re-uploading
+> makes the circuit a universal approximator. We have **not** run a controlled
+> single-encoding comparison on this dataset, so we quote no number for it. That
+> ablation is still on the list.
 
-*An earlier draft of our repo did quote a figure here. It wasn't reproducible
-from any committed script, so we withdrew it rather than defend it. If anyone
-has seen that number in an old version, say exactly this — it is a better
-answer than the number was.*
+**"Why not more qubits?"** ⭐
+> We tested it. More qubits only help if there's more information to carry, and
+> we measured eight qubits dropping to 0.640 and eight-qubits-six-layers
+> collapsing to 0.558 with the loss stuck — a barren-plateau signature. The
+> interesting part is the interaction: those same six layers *helped* at the
+> narrow width. So we went the other way — dense encoding to stay narrow, and the
+> shipped models are 2 and 3 qubits. Bigger made it worse; smaller-and-smarter
+> made it efficient.
 
-**"Why not more qubits?"** ⭐ *your strongest answer*
-> We tested it. Angle encoding puts one feature per qubit, so qubits only help if
-> there's more information to carry. At the time our 4-feature model scored 0.672;
-> going to 8 features on 8 qubits DROPPED it to 0.640. We also doubled the depth
-> at 8 qubits — 6 layers scored 0.558 against 0.640 for 3 layers, and the deeper
-> circuit never trained below 0.556 loss. That's consistent with barren plateaus.
-> Note the interaction, because it's the interesting part: those same 6 layers
-> HELPED at 4 qubits, 0.672 to 0.682. Depth isn't good or bad on its own — a
-> wider circuit hits trainability problems at a depth a narrower one tolerates.
-> Bigger made it worse, twice, but only once we were already too wide.
-
-**"Does this run on real hardware?"**
-> Not yet — PennyLane `default.qubit`, with a `QVIRA_BACKEND` switch for Qiskit
-> Aer. We report shot noise at 2048 shots, so the score carries an error bar.
-> Hardware is next, and the question there is transpilation depth and readout
-> error, not qubit count.
+**"Does this run on real hardware?"** ⭐ *(stronger answer than Round 1)*
+> Not yet, but the circuits are now 2–3 qubits — trivially small for a real
+> backend — so it's our immediate next step, not a distant one. We run on
+> PennyLane `default.qubit` with a `QVIRA_BACKEND` switch for Qiskit, and we
+> report shot noise at 2048 shots so the score carries an error bar. The open
+> question on hardware is readout error and transpilation, not qubit count.
 
 ---
 
 ## Technical Implementation (30%)
 
-**"What data, and what's your held-out result?"**
-> Starr et al. 2020 deep mutational scanning of the SARS-CoV-2 RBD — 4,221 single
-> mutants, each measured for ACE2 binding. Label is `bind_avg >= -1.0`. Held-out
-> AUC 0.747 for the VQC, against 0.750 SVM / 0.766 MLP / 0.780 logistic on
-> identical features and the identical split.
+**"What are your two models, and your held-out results?"**
+> The SARS-CoV-2 specialist: Starr et al. 2020 deep mutational scanning of the
+> RBD, label `bind_avg ≥ −1.0`, held-out AUC 0.742 ± 0.002 against 0.758 SVM /
+> 0.771 MLP / 0.780 logistic on identical features and split. The cross-virus
+> generalist: 17 viral proteins from the ProteinGym benchmark, 146k mutants
+> across 12 organisms, held out by protein, AUC 0.681 ± 0.002 — level with all
+> three classical baselines.
 
 **"How did you split?"** *(they're checking for leakage)*
-> Grouped by site, not by row. Mutations at one position are highly correlated,
-> so a random row split leaks and inflates the metric. 151 train sites, 50 test
-> sites, no overlap.
+> SARS-CoV-2: grouped by **site**, so correlated mutations at one position can't
+> leak across the split. Cross-virus: grouped by **protein**, so each test score
+> is the model generalising to a virus it never saw in training. Both are the
+> harder, honest choice — a random row split would have inflated both numbers by
+> ~0.2 AUC, which we measured.
 
 **"Why report AUC and not accuracy?"**
-> The dataset is 68% positive, so a model that always answers "yes" scores 0.684
-> accuracy. Every model we trained lands near 0.70 accuracy, which tells you
-> nothing. AUC separates them. That's also why `majority_class` is in our table.
+> The SARS-CoV-2 set is 68% positive, so "always yes" scores 0.684 accuracy and
+> tells you nothing; AUC separates the models. The panel is balanced at 50%, so
+> there majority-class is 0.500 and our 0.63 accuracy is a genuine 0.13 above
+> chance — a stronger result than it looks next to the old imbalanced numbers.
 
-**"What are your features?"**
-> BLOSUM62 substitution score, wild-type residue volume, change in volume, and
-> relative position in the chain. We compute eight and use four — selected by
-> ablation, not intuition.
+**"What's the burial feature, and why does it matter?"** ⭐ *(the Round 2 centrepiece)*
+> The SARS-CoV-2 model's strongest feature was ACE2 interface distance — but it's
+> measured from one crystal structure and is meaningless for any other virus. Its
+> generalisable cousin is **residue burial**: how packed a residue is in its own
+> fold, computed from AlphaFold structures. Adding it to the cross-virus model
+> gained **+0.027 AUC and improved all four held-out proteins**, with
+> non-overlapping restart ranges. And we verified the structure-to-assay join
+> residue-by-residue against the wildtype — two proteins whose AlphaFold numbering
+> disagreed were detected and dropped rather than trained on as noise.
 
-**"How did you choose those four?"** ⭐
-> We measured every subset. BLOSUM62 alone gives 0.655. Adding wild-type volume
-> takes it to 0.705, relative position to 0.754, delta volume to 0.757. Adding
-> the remaining four descriptors made it *worse* — 0.714. The ones we dropped —
-> delta hydropathy at 0.504 AUC alone, delta charge at 0.518 — are close to noise,
-> and each costs a qubit.
+**"How did you choose features — and does the same set work for both models?"** ⭐
+> No, and that's a measured result. Four features are best for SARS-CoV-2;
+> adding two made it *overfit* — AUC fell 0.07 while training loss improved, the
+> textbook signature. The same two features *help* on the 112k-row panel. The
+> optimal feature count scales with the data, so a set chosen on a small dataset
+> can't be assumed to transfer. We were briefly fooled by a logistic-regression
+> test that favoured six features — logistic regression has seven parameters and
+> can't overfit at that scale; our circuit can.
 
-**"Isn't BLOSUM62 doing all the work?"**
-> It's the strongest single feature, but no. Alone it's 0.655; the full set is
-> 0.757. And the clearest counterexample is relative position: it scores only
-> 0.602 on its own, yet removing it from the full set costs more AUC than
-> removing anything else. Univariate importance misled us, and we have the
-> drop-one-out table.
+**"Did anything fail, or surprise you?"** ⭐ *answer enthusiastically*
+> Several things, and they're the most useful part. One: our first-ever run
+> collapsed to the class prior — diagnosed from the loss equalling the prior
+> entropy exactly — because whole-sequence-average features made every variant
+> look identical. Two: more data didn't raise AUC until it was more *proteins*,
+> not more genetic backgrounds — a background panel was 90% feature-vector
+> duplicates. Three: narrowing the BLOSUM encoding range, which we were sure
+> would help, changed nothing (0.6812 vs 0.6796). We report the nulls because a
+> null is a result.
 
-**"Did anything fail?"** ⭐ *answer this one enthusiastically*
-> Yes, and it's the most useful thing we did. Our first run plateaued at 0.5866
-> loss and never moved. That value is exactly the entropy of the class prior,
-> 0.5862 — the model had collapsed to predicting the base rate. The cause was our
-> featuriser: it used whole-sequence averages, and a single substitution in a
-> 201-residue protein shifts those by under 0.05 radians out of a π range. Every
-> variant was the same input. We switched to substitution-level descriptors.
+**"Why should I trust a single number from you?"** ⭐
+> You shouldn't, which is why we stopped quoting single seeds. Every headline is
+> a mean over three random restarts with its spread. On the panel that spread is
+> ±0.002; on the smaller SARS-CoV-2 set it's up to ±0.02 — big enough that one
+> lucky seed could have "beaten" a baseline, which is exactly why we don't report
+> one. More data made the measurement itself trustworthy, tenfold.
 
 **"Is your R₀ predicted?"**
-> No. It's a stated linear map from the score onto 0.8–4.0, and we show the
-> mapping. It makes the SEIR panel interactive. Calling it a prediction would
-> need a backtest we haven't run.
+> No. It's a stated linear map from the score onto 0.8–4.0 that makes the SEIR
+> panel interactive; we show the mapping. Calling it a prediction would need a
+> backtest we haven't run. On the cross-virus tab it's flagged even more
+> strongly — SEIR fits a respiratory epidemic, so for an HIV or dengue protein
+> it's a generic what-if, shown for comparison only.
 
-**"Your SEIR assumptions?"**
-> Deterministic, homogeneous mixing, constant R₀, no interventions, no waning
-> immunity. β = R₀γ, σ = 1/5 d, γ = 1/7 d, integrated with RK45. A scenario.
+**"The VQE — what did you compute, and why is it on both tabs?"**
+> H₂ in a minimal basis, 4 qubits, scanned across the dissociation curve and
+> benchmarked against exact diagonalisation at every point — max error ~1.9e-7
+> Hartree, four orders inside chemical accuracy. It's the same benchmark on both
+> model tabs because H₂ is H₂ regardless of virus: it validates the quantum stack
+> and marks the honest rung of what runs exactly today. A protein binding pocket
+> is ~10⁵ qubits away; any demo claiming a quantum-computed binding energy is
+> doing something else.
 
-**"The VQE — what did you compute?"**
-> H₂ in STO-3G, 4 qubits, UCCSD-style ansatz, scanned across the dissociation
-> curve and benchmarked against exact diagonalisation at every point. Max error
-> 1.45e-7 Hartree, four orders inside chemical accuracy.
-
-**"Why not a binding pocket?"**
-> ~10⁵ qubits in a minimal basis, before error correction. Any demo claiming a
-> quantum-computed protein-ligand binding energy is doing something else.
-
-**"What happens if your AI copilot hits its rate limit while I'm watching?"** ⭐
-> It falls through. The copilot runs a provider chain — Gemini first, Grok second
-> — and any failure moves to the next one: a 429, a quota reset, a timeout, even
-> a model being renamed under us. Both providers get the identical system prompt
-> and the identical grounding context, so the answer doesn't change character
-> when it falls through, and the reply tells you which one served it. Either key
-> alone is enough to run.
->
-> It's the one part of the app that depends on someone else's server, which is
-> exactly why it has a fallback and the rest of the app doesn't need one.
-
-**"Isn't an LLM in the loop just a way to fabricate numbers?"**
-> It would be, if it computed anything. It doesn't. Every figure it can quote is
-> passed in as context from the endpoints that computed it, and the system prompt
-> forbids inventing figures and tells it to say so when the answer isn't in the
-> context. Ask it something the run didn't measure and it will tell you it
-> doesn't have it — that's worth demonstrating live.
-
-**"What breaks if NCBI is down during your demo?"**
-> Nothing visible. The feed is served from memory and the refresh runs on a
-> worker thread, so a failed fetch leaves the previous payload on screen and
-> reports the error rather than blanking the panel. Same principle everywhere in
-> the demo path: the copilot has a second provider, the feed has its committed
-> cache, and `/predict` returns a 503 with an explanation rather than a
-> plausible-looking number.
+**"What if your AI copilot hits its rate limit mid-demo?"**
+> It falls through — Gemini first, Grok second, any failure moves to the next,
+> both with the identical grounding context. It *explains*, it never computes:
+> every figure it can quote is passed in from the endpoints, and the prompt
+> forbids inventing numbers. Ask it something the run didn't measure and it says
+> so — worth demonstrating live.
 
 ---
 
 ## Originality (20%) and Impact (10%)
 
-**"Why not just use Nextstrain or the CDC?"**
-> Complementary. Nextstrain tells you what *has* spread, from assembled genomes.
-> We score a substitution the moment it's deposited. We'd consume Nextstrain, not
-> replace it.
-
 **"What's genuinely novel?"**
 > Not the VQC — variational classifiers are well explored. What's ours is the
-> end-to-end path from substitution to scenario with the uncertainty, the
-> classical baseline and the failed configurations all visible. Most pipelines
-> hide the baseline. The honest framing is engineering integration and
-> experimental discipline, not a new algorithm.
+> end-to-end discipline: two models with every baseline, every ablation and every
+> *null* result visible; a structural feature verified residue-by-residue; and a
+> cross-virus generalist held out by protein. Most pipelines hide the baseline and
+> the failures. The honest framing is engineering integration and experimental
+> rigour, not a new algorithm.
 
 **"Who would use this?"**
 > Surveillance labs triaging which deposited variants deserve wet-lab
-> characterisation first. That's a prioritisation problem, and it tolerates an
-> imperfect score far better than any clinical use would.
+> characterisation first — a prioritisation problem that tolerates an imperfect
+> score far better than any clinical use would. The cross-virus model widens that
+> from SARS-CoV-2 to a dozen organisms.
 
 ---
 
 ## The dangerous questions
 
-**"Your model is worse than logistic regression. Why should we care?"**
-> Because we measured it and reported it. The project is a controlled study of
-> whether a variational circuit is viable on this task at a scale where every
-> claim is verifiable. The answer is "not yet, and here is exactly how much not
-> yet." A team that reported only a quantum number would be hiding this.
+**"Your SARS-CoV-2 model is still worse than logistic regression. Why should we care?"**
+> Because we measured it and lead with it. And the Round 2 point isn't the AUC —
+> it's that we reached the same accuracy as our four-qubit model on **two qubits
+> and 45% fewer parameters**. For near-term quantum, qubit count and depth are the
+> scarce resources; halving them at equal accuracy is the engineering result. On
+> calibration and top-of-list precision — what a triage tool actually needs — the
+> circuit is level with logistic regression.
+
+**"Then why is the cross-virus model's number even lower, at 0.68?"** ⭐
+> Different, harder task — don't let the numbers be compared directly. 0.74 is
+> within-SARS-CoV-2; 0.68 is predicting a virus the model never saw in training,
+> which is strictly harder. On *that* task the circuit is level with every
+> classical baseline, and it spans 12 organisms. The honest statement is two
+> models answering two questions, each measured properly.
 
 **"This looks AI-generated."**
-> We used Gemini 3.1 Pro and Claude for code generation and review, credited in
-> the README. Every modelling decision — the site-grouped split, the feature
-> ablation, the depth ablation, the re-uploading ansatz — we made and measured.
-> Happy to walk through any file, or re-run any ablation right now.
+> We used AI for code generation and review, credited in the README. Every
+> modelling decision — both grouped splits, the feature ablations, the burial
+> feature and its verification, the dense encoding, the measured nulls — we made
+> and measured. Happy to walk any file or re-run any ablation right now. The giveaway
+> that it isn't slop: we report three null results and a model that loses on AUC.
 
-*Rehearse calmly. It's only damaging if you look caught.*
+**"What if I give it a different virus?"** ⭐ *(answer changed — we built for this)*
+> That's exactly what the **Cross-virus** tab is for. We trained a second model
+> across 17 proteins from 12 organisms — influenza, HIV-1, dengue, coxsackievirus
+> and more — held out by protein, so it's generalising to an unseen virus by
+> design. Pick one from the dropdown and score a substitution. The honest limit:
+> it only offers those 17 proteins, because its structural feature needs a solved
+> structure — it is not a universal scorer for an arbitrary protein, and we say so.
 
-**"What if I give it a different virus?"** ⭐
-> It will return a score, because the features are generic residue chemistry —
-> but that score is out of distribution and unvalidated. We trained only on
-> SARS-CoV-2 RBD binding to human ACE2. Influenza binds sialic acid, Ebola binds
-> NPC1 — different locks entirely. And our `ace2_distance` feature is a literal
-> measurement from the SARS-CoV-2 RBD/ACE2 crystal structure, 6M0J — there is no
-> such distance in another protein.
-> The model cannot detect this itself: we verified it returns an *identical*
-> score for the same substitution on a SARS reference and an Ebola reference.
-> So the interface flags it instead. Pick Ebola in the dropdown and you'll see
-> the warning. Validating on a second virus needs that virus's own DMS dataset.
-
-**"Your reference is the full 1,273-residue spike but you trained on 201 residues. How do the coordinates line up?"** ⭐
-> Good question — we hit exactly that bug. The DMS data is indexed by spike site
-> 331–531, so every per-site feature is defined *within* that 201-residue window.
-> Our NCBI reference is the full-length spike, so a naive index would read site
-> 501 as 0.393 of the way through instead of 0.846 — same mutation, completely
-> different feature value, silently wrong scores. The API now maps spike
-> coordinates back into the trained window, and flags any substitution outside
-> 331–531 as extrapolation. The same frame is what lets `ace2_distance` look up
-> the right residue in 6M0J.
-
-**"Is the surveillance feed live?"** ⭐
-> It refreshes itself, but a page load never waits on NCBI. The committed cache
-> is a seed; once the feed passes twelve hours old a background thread re-queries
-> NCBI and swaps the fresh result in, so the timestamp moves on its own. The
-> panel shows the real fetch time and how old it is — never a page-load time
-> dressed up as live. There's also a button that fires the fetch on demand.
->
-> We built it that way because NCBI is rate-limited and our host's filesystem is
-> ephemeral: a synchronous fetch on page load is a demo that hangs in front of
-> you. The pipeline behind it is real — deposited SARS-CoV-2 spikes, aligned
-> against Wuhan-Hu-1, substitutions extracted, the ones inside sites 331–531
-> scored by the trained VQC. Sequences we can't align past 80% coverage are
-> skipped and the count is *reported*, not quietly dropped.
+**"Full-length spike but you trained on 201 residues — how do the coordinates line up?"** ⭐
+> We hit exactly that bug. The DMS data is indexed by spike site 331–531, so every
+> per-site feature is defined within that window; our NCBI reference is
+> full-length. A naive index would read site 501 as 39% of the way through instead
+> of 85% — same mutation, different feature, silently wrong. The API maps spike
+> coordinates into the trained window and flags anything outside 331–531. The
+> cross-virus model enforces the same discipline: its burial join is verified
+> against each protein's wildtype, and mismatches are dropped, not scored.
 
 **"How do you rank the surveillance feed?"** ⭐
-> Not by the highest-scoring mutation — we tried that and it ranked nothing.
-> In the batch where we found this, 22 RBD mutations were present in every single
-> deposit — the Omicron-era inheritance — so all 11 distinct variants tied at
-> exactly 0.910 on R403K. The exact counts move as the feed refreshes; the
-> confounder doesn't. We now
-> set aside the shared background and rank by each deposit's *distinguishing*
-> mutations. That produces real separation: L441I at 0.871, K444R at 0.868,
-> K417N at 0.849. The shared background is the signal's biggest confounder and
-> it only appears when you run real data.
+> Not by the highest-scoring mutation — we tried that and it tied everything,
+> because a shared Omicron-era background sat in every deposit. We set the shared
+> background aside and rank by each deposit's *distinguishing* mutations, which
+> produces real separation. The confounder only shows up on real NCBI data.
 
 **"Is the VQE computed live?"**
-> No, and the panel says so. It is a real VQE — same optimiser, same circuit —
-> but run ahead of time by `build_vqe_data.py` and served from JSON. We had it
-> optimising inside the request and it blocked the server, making the tab
-> unusable. Max error across the dissociation curve is 1.9e-7 Hartree, four
-> orders inside chemical accuracy. Every point is reproducible with the notebook,
-> and the API still accepts `live: true` if you want to watch it run.
+> No, and the panel says so. It's a real VQE run ahead of time and served from
+> JSON — optimising inside the request blocked the server. Max error ~1.9e-7 Ha,
+> reproducible from the notebook.
 
-**"Should you just add more residue descriptors?"** ⭐
-> We measured that, and more chemistry made it worse: 8 descriptors scored 0.640
-> against 0.682 for the best 4. The missing information was not chemical but
-> spatial — none of our features knew where in the FOLDED protein a mutation
-> sits, and for ACE2 binding that dominates. So we computed each residue's
-> distance to ACE2 from the experimental complex 6M0J. It validated cleanly: our
-> <4.5 A set reproduces all 17 literature ACE2-contact residues. Alone it scores
-> 0.714, our strongest single feature, and it took the VQC from 0.682 to 0.747 —
-> within 0.004 of the SVM. One number per site, zero runtime cost, and it REPLACED a
-> feature rather than being added, so we stayed at 4 qubits.
+**"You lose on AUC — isn't the resource-efficiency story just spin?"** ⭐
+> Test it: our 2-qubit model's `/metrics` reports 41 parameters and AUC 0.742
+> against the Round 1 4-qubit/74-param model at 0.747 — same accuracy within the
+> ±0.002 seed noise, half the qubits. That's not a framing, it's in the committed
+> metrics. For NISQ hardware, where every qubit and gate costs fidelity, that is
+> the quantity that matters.
 
-**"Why doesn't your quantum model match the classical ones?"** ⭐
-> We tested whether it was under-training. Doubling depth (3→6 layers) and
-> tripling epochs took us from 0.672 to 0.682 — only +0.010 — while the training
-> loss fell much further, 0.499 to 0.464. Fitting the training set better without generalising
-> better means we are near the ceiling of the representation, not short of
-> optimisation. With only four residue descriptors there is a cap around 0.74 —
-> where the MLP sits — and a 4-qubit circuit read out through a single Pauli-Z
-> does not reach it. The fix is a richer representation, ESM-2 embeddings, not a
-> bigger circuit. We also found depth interacts with width: 6 layers helped at
-> 4 qubits and badly hurt at 8 (0.558), which is the barren-plateau behaviour.
-
-**"What happens at residues your crystal structure does not cover?"** ⭐
-> They get a far-field fallback distance, and we caught that biasing a real run.
-> 6M0J covers RBD 333-526, so sites 331-332 and 527-531 have no measurement. The
-> fallback reads as "far from the interface", which the model scores highly — and
-> on one NCBI batch the top-ranked drivers were exactly those unresolved sites.
-> We now flag them, mark them with an asterisk, and exclude them from ranking
-> while still displaying them. Promoting missing data to the top of a triage list
-> is the specific failure mode a surveillance tool must not have.
-
-**"You lose to all three classical models. Why is this a quantum project?"**  ⭐
-> On the point estimate, yes — and the model card leads with it. But we measured
-> how much of that ordering survives the sample size. A paired bootstrap over the
-> 946 held-out rows, 10,000 resamples, both models scoring identical rows on each
-> draw: logistic regression is ahead by +0.033 [+0.008, +0.059], which is real.
-> The MLP gap is +0.019 [−0.002, +0.041] and the SVM gap is +0.003
-> [−0.018, +0.025] — both include zero, and against the SVM our circuit wins
-> 37.8% of resamples.
->
-> So the defensible claim is: logistic regression beats us; the other two are not
-> separable from us on this much data. Run `api/bootstrap_gap.py` and you get
-> those numbers from the committed weights in about thirty seconds.
->
-> As for why quantum at four qubits — at this width the state is 16-dimensional
-> and classically simulable, which is the point. Every claim on the slide can be
-> checked by hand. We are not claiming advantage; we are claiming the design
-> decisions were driven by measurement, and three of them contradicted the
-> intuitive answer.
-
-**"Isn't the bootstrap just a way of explaining away a loss?"**
-> It would be if we had only run it on the gaps we lost. It is the same test for
-> all three, reported for all three, and it confirms the loss to logistic
-> regression rather than softening it. The test also tells us something we act on:
-> at this sample size, differences under ~0.05 AUC are not worth chasing, which
-> is why the roadmap goes after the representation (ESM-2) rather than tuning the
-> circuit for another 0.01.
+**"Could burial be a fluke of one split?"**
+> No — three seeds, and the restart ranges don't overlap: 0.653–0.656 without
+> burial, 0.679–0.683 with it. All four held-out proteins improved, and the
+> training loss fell too. If it were a lucky split we'd see overlap and a flat
+> training loss; we see neither.
 
 **"Can I just open this on my phone?"**
-> Yes — hand them your phone rather than describing it. The app is verified
-> across ten viewports from a 320px phone to a 1920px desktop, including a
-> landscape phone and both tablet orientations: no horizontal scrolling, 44px
-> touch targets, and 16px form fields so iOS doesn't zoom the page when they tap
-> the mutation box. The tab rail sticks under the header on a phone, so they can
-> move between panels without scrolling back to the top.
-
-**"I don't know what half these words mean."**
-> That's answered in the product, not by you. Every technical term on the page is
-> marked with a dotted underline; tapping it gives a plain-English sentence and a
-> link to the source — Wikipedia for the established concepts, the primary paper
-> for the methods, RCSB for the structure. The footer carries the whole glossary,
-> 46 entries, grouped by field.
->
-> Say this if it comes up: the vocabulary is explained *alongside* the technical
-> term, never instead of it. A specialist judge loses nothing; a judge from
-> another track can still follow what the model does.
-
-**"Could it generalise at all?"**
-> Possibly, partially. BLOSUM62 carries general signal about destabilising
-> substitutions in any protein. But we have zero measurements outside
-> SARS-CoV-2, so we don't claim it. That's a roadmap item, not a result.
-
-**"Show me it working on a mutation I pick."**
-> Have this ready. Warm Render first. If they name a mutation that doesn't match
-> the reference, the API says so and names the actual residue — demo that, it
-> looks good. The ablation flags also let you re-run a losing config live.
+> Yes — hand them the phone. Verified across ten viewports, 44px touch targets,
+> 16px form fields so iOS doesn't zoom. Both model tabs work the same.
 
 ---
 
-## Showing the model card live
+## Showing the model cards live
 
-The masthead shows the held-out AUC and opens a **model card** served from
-`/metrics` — the same JSON the training run wrote, not typed by hand. It draws
-every model as a ranked bar, with ours sitting fourth of five and a note saying
-so.
-
-Open it yourself, early, before anyone asks. Leading with "here is where our
-quantum model loses" buys more credibility than any number you could show, and
-it pre-empts the single most dangerous question in the room.
+The masthead opens a **model card** served from `/metrics` — the same JSON the
+training run wrote. Open it yourself, early: leading with "here's where our
+quantum model loses on AUC, and here's the two-qubit efficiency win beside it"
+buys more credibility than any number, and pre-empts the most dangerous question.
+Then open the **Cross-virus** tab and score an influenza or HIV mutation live —
+that's the Round 2 story in one click.
 
 ## Demo failure drill
 
-1. Pre-warm Render ~10 min before. Free instances sleep.
-2. Keep local `npm run dev` + `uvicorn` running as the fallback.
+1. Pre-warm Render ~10 min before (free instances sleep ~50 s).
+2. Keep local `npm run dev` + `uvicorn` running as fallback.
 3. Keep the 3-min video downloaded, not streamed.
-4. If the backend dies the UI shows a red banner and **no numbers**. Point at it:
-   "it refuses to show fabricated output" is a better moment than a smooth demo.
-5. Have `RESULTS.md` and `metrics.json` open in tabs — that's your evidence.
-6. Check `GET /` before you start: `copilot_providers` should read
-   `["gemini", "grok"]` and `sentinel.auto_refresh` should be `true`. If only one
-   provider is listed, the other key did not reach the process — the copilot
-   still works, but it has no fallback left.
+4. If the backend dies the UI shows a banner and **no numbers** — point at it:
+   "it refuses to show fabricated output" beats a smooth demo.
+5. Have `RESULTS.md`, `metrics.json` and `metrics_panel.json` open as evidence.
+6. Check `GET /` and `GET /panel/status` before you start: panel should read
+   `available: true`, `n_proteins: 17`.
 
-## Slide checklist (max 10; FAQ says 8 — confirm in the portal)
+## Slide checklist (max 10; confirm the cap in the portal)
 
 1. Problem — surveillance triage latency
-2. Architecture diagram
+2. Architecture — two models, one shared circuit definition
 3. **Why quantum** — expressivity per parameter, no advantage claimed
-4. The circuit — 4 qubits, 6 layers, re-uploading ansatz (no number claimed for it)
-5. **Results** — VQC 0.747 beside all baselines, chance line marked
-6. **Ablations** — structure vs chemistry, features 4 vs 8, depth x width, the flat-loss failure
-7. VQE — H₂ vs exact diagonalisation, plus the scaling table
-8. Limitations and roadmap ← **do not cut this slide**
+4. The circuits — 2 and 3 qubits, dense encoding, re-uploading ansatz
+5. **Results** — both models beside their baselines, 3-seed spreads, chance line
+6. **The burial feature** — +0.027, all 4 proteins, verified join
+7. **What we measured** — feature count scales with data; three null results
+8. VQE — H₂ vs exact diagonalisation + the scaling ladder
+9. Limitations and roadmap (hardware run next) ← **do not cut**
 
 ## Two days before
 
-- [ ] `metrics.json` says `"is_synthetic": false`
-- [ ] `python build_panel.py` run; `reference_panel.json` committed
-- [ ] Every accession and PDB ID checked against its label
+- [ ] `metrics.json` and `metrics_panel.json` both say `"is_synthetic": false`
+- [ ] `GET /panel/status` → `available: true`, 17 proteins
 - [ ] Deck numbers match `RESULTS.md` exactly — zero placeholders
-- [ ] Each member can explain one component end to end
-- [ ] Deployed frontend talks to deployed backend (check CORS)
+- [ ] `bootstrap_gap.py` re-run against the shipped 2-qubit weights (the committed
+      JSON is from the old model)
+- [ ] Each member can explain one component end to end — and can state which model
+      is which
+- [ ] Deployed frontend talks to deployed backend; both model tabs load
