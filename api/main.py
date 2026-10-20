@@ -29,6 +29,7 @@ from quantum_engine import engine
 import vqe as vqe_mod
 import sentinel as sentinel_mod
 from reference_panel import nearest_reference, panel_size, get_reference, list_references
+from panel_engine import panel_engine
 
 API_VERSION = "2.1.0"
 
@@ -483,3 +484,65 @@ def copilot(req: CopilotRequest):
     if not text:
         raise HTTPException(502, "Copilot returned an empty response.")
     return {"answer": text, "model": model, "grounded_in": list((req.context or {}).keys())}
+
+
+# ---------------------------------------------------------------- panel (multi-virus)
+# The cross-virus generalist (weights_panel.npz). Scores substitutions in the 17
+# proteins whose AlphaFold structure numbering was verified against the assay
+# wildtype. Served by panel_engine, which is independent of the SARS-CoV-2
+# engine above and degrades gracefully if the panel model is absent.
+
+class PanelPredictRequest(BaseModel):
+    protein: str = Field(min_length=1, max_length=128)
+    site: int = Field(ge=1, le=10000)
+    mutant: str = Field(min_length=1, max_length=1)
+
+
+@app.get("/panel/status")
+def panel_status():
+    """Whether the multi-virus model is available, and its headline metrics."""
+    vqc = (panel_engine.metadata or {}).get("vqc", {}) if panel_engine.ok else {}
+    return {
+        "available": panel_engine.ok,
+        "reason": panel_engine.reason,
+        "n_proteins": len(panel_engine.catalog) if panel_engine.ok else 0,
+        "n_qubits": panel_engine.n_qubits if panel_engine.ok else None,
+        "features": "blosum62, wt_volume, delta_volume, wt_hydropathy, "
+                    "delta_hydropathy, burial",
+        "held_out_auc": vqc.get("roc_auc"),
+        "note": "Protein-held-out generalist; scores only catalogued proteins "
+                "at structure-covered sites.",
+    }
+
+
+@app.get("/panel/catalog")
+def panel_catalog():
+    """Viruses -> assays, for the first two dropdowns."""
+    if not panel_engine.ok:
+        raise HTTPException(503, f"Panel model unavailable ({panel_engine.reason})")
+    return {"viruses": panel_engine.list_viruses()}
+
+
+@app.get("/panel/sites")
+def panel_sites(protein: str):
+    """Sites (with wildtype) for a chosen assay, for the site dropdown."""
+    if not panel_engine.ok:
+        raise HTTPException(503, f"Panel model unavailable ({panel_engine.reason})")
+    if protein not in panel_engine.catalog:
+        raise HTTPException(404, f"Unknown protein {protein!r}")
+    return {"protein": protein,
+            "virus": panel_engine.catalog[protein]["virus"],
+            "sites": panel_engine.sites_for(protein)}
+
+
+@app.post("/panel/predict")
+def panel_predict(req: PanelPredictRequest):
+    if not panel_engine.ok:
+        raise HTTPException(503, f"Panel model unavailable ({panel_engine.reason})")
+    try:
+        r = panel_engine.score(req.protein, req.site, req.mutant)
+        r["state_distribution"] = panel_engine.distribution(
+            req.protein, req.site, req.mutant)
+        return r
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(422, str(exc))
