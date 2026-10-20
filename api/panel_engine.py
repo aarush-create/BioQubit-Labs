@@ -176,12 +176,26 @@ class PanelEngine:
         logit = float(logits(raw, pnp.array(self.readout, requires_grad=False),
                              self.readout_kind))
         p = float(_sigmoid(logit))
+
+        # The raw descriptor values the model actually reads, for the UI radar.
+        # feature_cols (4,6,2,5,0,9) = blosum62, wt_volume, delta_volume,
+        # wt_hydropathy, delta_hydropathy, burial (burial is appended index 9).
+        _full = list(mf.raw_descriptors(wt, mut, 0.0, site=int(site))) + [float(bur)]
+        features = {
+            "blosum62": round(float(_full[4]), 3),
+            "wt_volume": round(float(_full[6]), 3),
+            "delta_volume": round(float(_full[2]), 3),
+            "wt_hydropathy": round(float(_full[5]), 3),
+            "delta_hydropathy": round(float(_full[0]), 3),
+            "burial": round(float(_full[9]), 3),
+        }
         return {
             "protein": protein,
             "virus": self.catalog[protein]["virus"],
             "mutation": f"{wt}{site}{mut}",
             "wildtype": wt, "site": int(site), "mutant": mut,
             "burial_cn10": bur,
+            "features": features,
             "score": round(p, 4),
             "interpretation": ("higher = more likely to retain function "
                                "(worth characterising first)"),
