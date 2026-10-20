@@ -1,0 +1,207 @@
+{
+  "data_source": "pg_growth_burial.csv",
+  "is_synthetic": false,
+  "n_train": 111859,
+  "n_val": 0,
+  "n_test": 34302,
+  "split": "grouped by protein, three-way (train/val/test); no protein appears in more than one split",
+  "group_kind": "protein",
+  "selection": "early stopping and restart choice on VALIDATION auc; test scored once",
+  "split_seed": 0,
+  "split_val_frac": 0.0,
+  "label": "bind_avg >= -1.0 (retains ACE2 binding)",
+  "features": "mutation-delta-v2 cols=[4, 6, 2, 5, 0, 9] (['blosum62', 'wt_volume', 'delta_volume', 'wt_hydropathy', 'delta_hydropathy', 'burial'])",
+  "blosum62_clamp": [
+    -4.0,
+    3.0
+  ],
+  "feature_cols": [
+    4,
+    6,
+    2,
+    5,
+    0,
+    9
+  ],
+  "train_seconds": 1001.8,
+  "vqc": {
+    "accuracy": 0.6303,
+    "roc_auc": 0.6781,
+    "n_features": 6,
+    "n_qubits": 3,
+    "n_layers": 6,
+    "readout": "probs",
+    "encoding": "dense",
+    "axes": [
+      "Y",
+      "Z"
+    ],
+    "n_circuit_parameters": 54,
+    "n_readout_parameters": 9,
+    "n_parameters": 63,
+    "ansatz": "data-reuploading-StronglyEntanglingLayers",
+    "restarts": 3,
+    "selected_seed": 0,
+    "val_auc_of_selected": null,
+    "best_epoch": 19,
+    "triage": {
+      "base_rate": 0.5,
+      "precision_at_25": 0.6,
+      "enrichment_at_25": 1.2,
+      "precision_at_100": 0.6,
+      "enrichment_at_100": 1.2,
+      "precision_at_250": 0.72,
+      "enrichment_at_250": 1.44,
+      "clean_prefix": 0,
+      "brier": 0.229,
+      "calibration_gap": 0.0423
+    },
+    "restart_spread": {
+      "n_restarts": 3,
+      "test_auc_mean": 0.6796,
+      "test_auc_std": 0.0014,
+      "test_auc_min": 0.6781,
+      "test_auc_max": 0.6808,
+      "per_seed": [
+        {
+          "seed": 0,
+          "val_auc": null,
+          "test_auc": 0.6781,
+          "best_epoch": 19
+        },
+        {
+          "seed": 1,
+          "val_auc": null,
+          "test_auc": 0.68,
+          "best_epoch": 19
+        },
+        {
+          "seed": 2,
+          "val_auc": null,
+          "test_auc": 0.6808,
+          "best_epoch": 19
+        }
+      ],
+      "val_test_correlation": null
+    },
+    "per_group": {
+      "A0A2Z5U3Z0_9INFA_Wu_2014": {
+        "n": 2350,
+        "pos_rate": 0.5,
+        "auc": 0.697
+      },
+      "A4D664_9INFA_Soh_2019": {
+        "n": 14421,
+        "pos_rate": 0.5,
+        "auc": 0.701
+      },
+      "PA_I34A1_Wu_2015": {
+        "n": 1820,
+        "pos_rate": 0.5,
+        "auc": 0.6784
+      },
+      "POLG_CXB3N_Mattenberger_2021": {
+        "n": 15711,
+        "pos_rate": 0.5,
+        "auc": 0.6607
+      }
+    }
+  },
+  "classical_baselines_same_features": {
+    "majority_class": {
+      "accuracy": 0.5,
+      "roc_auc": 0.5,
+      "n_train_used": 111859,
+      "triage": {
+        "base_rate": 0.5,
+        "precision_at_25": 0.16,
+        "enrichment_at_25": 0.32,
+        "precision_at_100": 0.44,
+        "enrichment_at_100": 0.88,
+        "precision_at_250": 0.476,
+        "enrichment_at_250": 0.952,
+        "clean_prefix": 1,
+        "brier": 0.5,
+        "calibration_gap": 0.5
+      }
+    },
+    "logistic_regression": {
+      "accuracy": 0.6245,
+      "roc_auc": 0.6761,
+      "n_train_used": 111859,
+      "triage": {
+        "base_rate": 0.5,
+        "precision_at_25": 0.72,
+        "enrichment_at_25": 1.44,
+        "precision_at_100": 0.81,
+        "enrichment_at_100": 1.62,
+        "precision_at_250": 0.796,
+        "enrichment_at_250": 1.592,
+        "clean_prefix": 1,
+        "brier": 0.2309,
+        "calibration_gap": 0.0572
+      }
+    },
+    "svm_rbf": {
+      "accuracy": 0.6366,
+      "roc_auc": 0.6813,
+      "n_train_used": 20000,
+      "triage": {
+        "base_rate": 0.5,
+        "precision_at_25": 0.88,
+        "enrichment_at_25": 1.76,
+        "precision_at_100": 0.89,
+        "enrichment_at_100": 1.78,
+        "precision_at_250": 0.84,
+        "enrichment_at_250": 1.68,
+        "clean_prefix": 0,
+        "brier": 0.2289,
+        "calibration_gap": 0.0526
+      }
+    },
+    "mlp": {
+      "accuracy": 0.6329,
+      "roc_auc": 0.6835,
+      "n_train_used": 111859,
+      "triage": {
+        "base_rate": 0.5,
+        "precision_at_25": 0.76,
+        "enrichment_at_25": 1.52,
+        "precision_at_100": 0.79,
+        "enrichment_at_100": 1.58,
+        "precision_at_250": 0.764,
+        "enrichment_at_250": 1.528,
+        "clean_prefix": 1,
+        "brier": 0.2288,
+        "calibration_gap": 0.0505
+      }
+    }
+  },
+  "history": [
+    {
+      "epoch": 0,
+      "train_loss": 0.6329,
+      "val_auc": null
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.6248,
+      "val_auc": null
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.6187,
+      "val_auc": null
+    },
+    {
+      "epoch": 15,
+      "train_loss": 0.6164,
+      "val_auc": null
+    },
+    {
+      "epoch": 19,
+      "train_loss": 0.6152,
+      "val_auc": null
+    }
+  ]
+}

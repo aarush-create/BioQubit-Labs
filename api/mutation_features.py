@@ -116,23 +116,98 @@ def ace2_distance(site: int) -> float:
     """Minimum heavy-atom distance from this spike site to ACE2, angstroms."""
     return ACE2_DISTANCE.get(int(site), ACE2_FAR)
 
+# ---------------------------------------------------------------------------
+# RANGE CALIBRATION -- why blosum62 changed from (-4, 11) to (-4, 3)
+# ---------------------------------------------------------------------------
+# Angle encoding maps each descriptor onto [0, pi] by clamping to its declared
+# range. If the declared range is wider than the values that actually occur,
+# the samples compress into a narrow arc of the rotation and the circuit sees
+# far less variation than it could -- the encoding throws away resolution.
+#
+# Measured on single_mut_effects.csv (3802 rows, wt != mut), observed p1-p99
+# against the declared range:
+#
+#     descriptor          declared        observed p1-p99     range used
+#     delta_hydropathy    (-9, 9)         (-8.30,  8.10)          91%
+#     delta_charge        (-2, 2)         (-1.10,  1.10)          55%
+#     delta_volume        (-170, 170)     (-116.68, 138.80)       75%
+#     relative_position   (0, 1)          ( 0.01,  0.99)          98%
+#     blosum62            (-4, 11)        (-4.00,  3.00)          47%   <-- bad
+#     wt_hydropathy       (-4.5, 4.5)     (-4.50,  4.50)         100%
+#     wt_volume           (60, 228)       (60.10, 193.60)         79%
+#     pro_gly_flag        (0, 1)          ( 0.00,  1.00)         100%
+#     ace2_distance       (0, 45)         ( 2.71, 45.00)          94%
+#
+# blosum62 is the worst offender AND our strongest descriptor. The upper bound
+# of 11 comes from the matrix diagonal (W->W = 11), but identical residues are
+# filtered out before featurisation, so values above +3 never occur. Observed
+# counts across the whole dataset:
+#     -4:156  -3:860  -2:976  -1:851  0:542  1:251  2:113  3:53
+#
+# Narrowing the clamp to (-4, 3) roughly doubles the angular resolution on
+# that descriptor. It is a no-op for the classical baselines, which are
+# effectively invariant to a monotone rescaling -- measured: logistic
+# regression 0.7745 with the old ranges, 0.7738 with empirical ranges, a
+# difference well inside the +/-0.06 fold spread. So this change can only
+# matter to the QUANTUM model, which is the point: it is a change to the
+# encoding, not to the information.
+#
+# MEASURED, AND IT MADE NO DIFFERENCE. On the panel, where restart noise is
+# only +/-0.002, three seeds each:
+#     old clamp (-4, 11)   0.6812 +/- 0.0022   range [0.6788, 0.6832]
+#     new clamp (-4,  3)   0.6796 +/- 0.0014   range [0.6781, 0.6808]
+# Overlapping, with the "corrected" clamp marginally worse. The reasoning that
+# more angular resolution on the strongest descriptor must help was simply
+# wrong -- the circuit did not need it.
+#
+# The narrower clamp is kept because it is the honest description of the data
+# (+11 cannot occur once identical residues are filtered), and it is recorded
+# here as a measured NULL rather than quietly dropped. It is not a result.
+#
 # Fixed clamp ranges -> angles in [0, pi]. Constants, never fitted per-input.
 RANGES = (
     (-9.0, 9.0),      # delta hydropathy
     (-2.0, 2.0),      # delta charge
     (-170.0, 170.0),  # delta volume
     (0.0, 1.0),       # relative position
-    (-4.0, 11.0),     # BLOSUM62 score
+    (-4.0, 3.0),      # BLOSUM62 score -- see RANGE CALIBRATION below
     (-4.5, 4.5),      # wild-type hydropathy
     (60.0, 228.0),    # wild-type volume
     (0.0, 1.0),       # proline/glycine involved
     (0.0, 45.0),      # distance to ACE2, angstroms
+    (0.0, 40.0),      # burial: residues within 10 A (contact number)
 )
 NAMES = (
     "delta_hydropathy", "delta_charge", "delta_volume", "relative_position",
     "blosum62", "wt_hydropathy", "wt_volume", "pro_gly_flag",
-    "ace2_distance",
+    "ace2_distance", "burial",
 )
+
+# ---------------------------------------------------------------------------
+# BURIAL (index 9) -- supplied per row, not computed here
+# ---------------------------------------------------------------------------
+# raw_descriptors() returns indices 0-8. Index 9 is appended by
+# train_vqc.load_panel() from the `burial` column of a multi-protein panel,
+# which proteingym_loader.py joins from build_burial_features.py.
+#
+# WHY IT EXISTS
+#   ace2_distance is the strongest single descriptor we have (0.7143 AUC
+#   alone), but it is measured from one complex -- 6M0J, SARS-CoV-2 RBD bound
+#   to ACE2 -- so it is a CONSTANT for every other protein. Training across
+#   proteins without it left the model with five descriptors that say WHICH
+#   residue changed and nothing about WHERE, and multi-protein AUC fell to
+#   ~0.63.
+#
+#   Burial is the generalizable version: how packed a residue is inside its
+#   own fold, computable for any protein from structure alone, no binding
+#   partner required. It restores positional context protein-agnostically.
+#
+# Range (0, 40) covers contact number at 10 A: surface residues land around
+# 5-10, buried core residues around 15-25.
+#
+# NEVER select index 8 (ace2_distance) and index 9 together on a
+# multi-protein run: outside SARS-CoV-2, index 8 is the ACE2_FAR constant and
+# contributes a dead wire.
 # ---------------------------------------------------------------------------
 # ACTIVE FEATURE SET
 # ---------------------------------------------------------------------------
@@ -147,14 +222,64 @@ NAMES = (
 # relative_position was REPLACED by ace2_distance rather than added alongside:
 # adding it as a 5th feature scored 0.7329, worse than either 4-feature set.
 #
-# Dropping delta_hydropathy (0.504 AUC alone), delta_charge (0.518),
-# wt_hydropathy and pro_gly_flag improved EVERY model. Those four are close to
-# noise, and each one costs a qubit, more parameters and more room to overfit.
+# CORRECTION (measured 2026-10-18) -- the claim below this line used to read
+# "dropping delta_hydropathy, delta_charge, wt_hydropathy and pro_gly_flag
+# improved EVERY model", and that was WRONG. It came from ONE train/test
+# split, and fold-to-fold spread on this data is +/-0.05 AUC, so the
+# comparison was reading noise.
 #
-# Note that the chosen four are NOT simply the best four individually:
-# relative_position scores only 0.602 alone, yet removing it costs more AUC
-# than removing anything else. Features matter in combination.
+# Re-measured with 200 PAIRED site-grouped resamples (identical splits scored
+# with both feature sets), logistic regression on the development set:
+#
+#     4 features (this SELECTED)      0.7551 +/- 0.0459
+#     6 features (+ wt_hydropathy,
+#                  + delta_hydropathy) 0.7790 +/- 0.0491
+#     paired difference               +0.0239, wins 173/200 draws,
+#                                     paired t = +14.5
+#
+# Beyond six it is flat (7 features +0.021, 8 +0.022, 9 +0.019), and
+# relative_position is the one descriptor that actively hurts: 9-with-it
+# (+0.019) is worse than 8-without-it (+0.022). So the original instinct that
+# relative_position should go was right; the specific "four beats eight" claim
+# was not.
+#
+# The per-draw 95% range of that difference is [-0.040, +0.054] and includes
+# zero: on any SINGLE split six features can lose. That is why it is reported
+# as a paired mean over many draws rather than one number.
+#
+# TO SHIP THE SIX-FEATURE MODEL, swap the two SELECTED lines below and
+# RETRAIN. Do not swap it without retraining: quantum_engine.load() compares
+# the trained feature count against N_FEATURES and will refuse to serve a
+# mismatched weights.npz -- correctly, but it would take the live API down
+# until new weights exist.
+# MEASURED 2026-10-19, and this REVERSES the recommendation above.
+#
+# The paired test that favoured six features used LOGISTIC REGRESSION, which
+# has 7 parameters. The VQC has 41-63. Trained end to end on the same 2,856
+# rows, three restarts each, dense Y/Z encoding, probs readout:
+#
+#     4 features, 2 qubits, 41 params   0.7571 +/- 0.0202   <-- SHIPPED
+#     6 features, 3 qubits, 63 params   0.6785 +/- 0.0014
+#
+# Adding two descriptors cost 0.079 AUC. The mechanism is in the training
+# loss: the 6-feature model converges to 0.4243 while the 4-feature model
+# stops at 0.4553 -- it fits the training set BETTER and generalises WORSE.
+# Classic overfitting, invisible to a 7-parameter baseline.
+#
+# The six-feature set IS better where there is data to support it: on the
+# 111,859-row multi-protein panel it wins by +0.0265 with non-overlapping
+# restart ranges. So the optimal feature count scales with dataset size --
+# four here, six there -- and a feature set cannot be chosen on a proxy model
+# with a tenth of the capacity.
 SELECTED = (4, 6, 2, 8)  # blosum62, wt_volume, delta_volume, ace2_distance
+# SELECTED = (4, 6, 2, 8, 5, 0)  # overfits at 2.8k rows; correct for the panel
+
+# raw_descriptors() computes indices 0..8. Index 9 (burial) is appended
+# per-row by train_vqc.load_panel from a panel's `burial` column, so the two
+# counts differ and must not be used interchangeably: selecting index 9 on the
+# single-assay path would index past the end of the vector.
+N_BASE_FEATURES = 9      # what raw_descriptors() returns
+BURIAL_INDEX = 9         # supplied externally, panel runs only
 
 ACTIVE_NAMES = tuple(NAMES[i] for i in SELECTED)
 ACTIVE_RANGES = tuple(RANGES[i] for i in SELECTED)

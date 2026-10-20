@@ -1,0 +1,184 @@
+{
+  "panel": "panel.csv",
+  "threshold": -1.0,
+  "n_rows": 30270,
+  "n_backgrounds": 8,
+  "alias_mapping": {
+    "Alpha": "Alpha",
+    "Beta": "Beta",
+    "Delta": "Delta",
+    "E484K": "E484K",
+    "Eta": "E484K",
+    "N501Y": "Alpha",
+    "Omicron_BA1": "Omicron_BA1",
+    "Omicron_BA2": "Omicron_BA2",
+    "Wuhan-Hu-1": "Wuhan-Hu-1",
+    "Wuhan-Hu-1_v1": "Wuhan-Hu-1",
+    "Wuhan-Hu-1_v2": "Wuhan-Hu-1_v2"
+  },
+  "disagreement": {
+    "distinct_triples": 4218,
+    "triples_in_more_than_one_background": 4066,
+    "triples_with_disagreeing_labels": 783,
+    "disagreement_rate": 0.1925725528775209,
+    "mean_minority_fraction_when_mixed": 0.2620005473453749
+  },
+  "ceiling_oracle_optimistic": {
+    "pooled_auc": 0.9917089634635127,
+    "per_genotype": {
+      "Alpha": 0.993060105625483,
+      "Beta": 0.9954697107053215,
+      "Delta": 0.9932583767601111,
+      "E484K": 0.9975200977146502,
+      "Omicron_BA1": 0.9921557327687629,
+      "Omicron_BA2": 0.9916718564615014,
+      "Wuhan-Hu-1": 0.9973708418200551,
+      "Wuhan-Hu-1_v2": 0.9973651947605017
+    }
+  },
+  "ceiling_leave_one_genotype_out": {
+    "pooled_auc": 0.9772743132521016,
+    "mean_per_genotype_auc": 0.9813961471690896,
+    "per_genotype": {
+      "Alpha": {
+        "auc": 0.982410068267014,
+        "n": 3736,
+        "pos_rate": 0.6600642398286938
+      },
+      "Beta": {
+        "auc": 0.989064648819325,
+        "n": 3804,
+        "pos_rate": 0.6608832807570978
+      },
+      "Delta": {
+        "auc": 0.9644586491286686,
+        "n": 3799,
+        "pos_rate": 0.7301921558304817
+      },
+      "E484K": {
+        "auc": 0.9911550403768302,
+        "n": 3743,
+        "pos_rate": 0.6179535132246861
+      },
+      "Omicron_BA1": {
+        "auc": 0.9637243357240157,
+        "n": 3762,
+        "pos_rate": 0.5943646996278575
+      },
+      "Omicron_BA2": {
+        "auc": 0.9752138902100469,
+        "n": 3725,
+        "pos_rate": 0.6179865771812081
+      },
+      "Wuhan-Hu-1": {
+        "auc": 0.992828955377099,
+        "n": 3772,
+        "pos_rate": 0.66118769883351
+      },
+      "Wuhan-Hu-1_v2": {
+        "auc": 0.9923135894497176,
+        "n": 3777,
+        "pos_rate": 0.6478686788456447
+      }
+    },
+    "rows_excluded_singleton_triple": 152
+  },
+  "transfer": {
+    "matrix": {
+      "Alpha": {
+        "Alpha": NaN,
+        "Beta": 0.9895196674947924,
+        "Delta": 0.9790829599021749,
+        "E484K": 0.9770085999100412,
+        "Omicron_BA1": 0.976742475211863,
+        "Omicron_BA2": 0.9757466962034985,
+        "Wuhan-Hu-1": 0.9785772235304959,
+        "Wuhan-Hu-1_v2": 0.9788228232756121
+      },
+      "Beta": {
+        "Alpha": 0.9892350980530937,
+        "Beta": NaN,
+        "Delta": 0.9720336672100962,
+        "E484K": 0.9818261872007786,
+        "Omicron_BA1": 0.9857900577700976,
+        "Omicron_BA2": 0.9819329981583308,
+        "Wuhan-Hu-1": 0.9786311150143118,
+        "Wuhan-Hu-1_v2": 0.9780455465425745
+      },
+      "Delta": {
+        "Alpha": 0.9782442059995473,
+        "Beta": 0.9747356378213112,
+        "Delta": NaN,
+        "E484K": 0.9881809766675037,
+        "Omicron_BA1": 0.9669466784543217,
+        "Omicron_BA2": 0.9665724967813073,
+        "Wuhan-Hu-1": 0.9931680025650269,
+        "Wuhan-Hu-1_v2": 0.9928021255803353
+      },
+      "E484K": {
+        "Alpha": 0.9757922846983156,
+        "Beta": 0.983294952110739,
+        "Delta": 0.9886657709043737,
+        "E484K": NaN,
+        "Omicron_BA1": 0.9774489953235008,
+        "Omicron_BA2": 0.976031002909687,
+        "Wuhan-Hu-1": 0.9956495053794497,
+        "Wuhan-Hu-1_v2": 0.9954108439391114
+      },
+      "Omicron_BA1": {
+        "Alpha": 0.97346840539281,
+        "Beta": 0.985175361406172,
+        "Delta": 0.9670126302901423,
+        "E484K": 0.972868233291511,
+        "Omicron_BA1": NaN,
+        "Omicron_BA2": 0.9898744494037142,
+        "Wuhan-Hu-1": 0.9679619487509908,
+        "Wuhan-Hu-1_v2": 0.9671732749217385
+      },
+      "Omicron_BA2": {
+        "Alpha": 0.9705684590031731,
+        "Beta": 0.9822870708453776,
+        "Delta": 0.9595802833016959,
+        "E484K": 0.9709430641840273,
+        "Omicron_BA1": 0.9877139900398468,
+        "Omicron_BA2": NaN,
+        "Wuhan-Hu-1": 0.9677621706633026,
+        "Wuhan-Hu-1_v2": 0.9675531636033544
+      },
+      "Wuhan-Hu-1": {
+        "Alpha": 0.9759186956660362,
+        "Beta": 0.9767695196490567,
+        "Delta": 0.992557296984915,
+        "E484K": 0.992687786586632,
+        "Omicron_BA1": 0.9688654859887738,
+        "Omicron_BA2": 0.972058045851868,
+        "Wuhan-Hu-1": NaN,
+        "Wuhan-Hu-1_v2": 0.9970061349693251
+      },
+      "Wuhan-Hu-1_v2": {
+        "Alpha": 0.9772121057359883,
+        "Beta": 0.9762405463429368,
+        "Delta": 0.9944639151889243,
+        "E484K": 0.992872958500502,
+        "Omicron_BA1": 0.9688854905926987,
+        "Omicron_BA2": 0.9715382345193269,
+        "Wuhan-Hu-1": 0.997614274912898,
+        "Wuhan-Hu-1_v2": NaN
+      }
+    },
+    "genotypes": [
+      "Alpha",
+      "Beta",
+      "Delta",
+      "E484K",
+      "Omicron_BA1",
+      "Omicron_BA2",
+      "Wuhan-Hu-1",
+      "Wuhan-Hu-1_v2"
+    ],
+    "mean_off_diagonal": 0.9796530641285719,
+    "min_off_diagonal": 0.9595802833016959,
+    "note": "diagonal is NaN by construction, not a measurement"
+  },
+  "interpretation": "The leave-one-genotype-out AUC is the best any model using only (site, wildtype, mutant)-derived features could achieve on this data. Compare it against the VQC and the classical baselines in metrics.json: a gap to the ceiling is model capacity, the ceiling itself is missing genetic context."
+}
