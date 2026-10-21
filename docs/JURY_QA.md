@@ -83,6 +83,14 @@ cost you the room.
 > shipped models are 2 and 3 qubits. Bigger made it worse; smaller-and-smarter
 > made it efficient.
 
+**"Why six layers — would a deeper circuit help?"**
+> We measured that too: a 3-seed A/B of 8 layers against the shipped 6, same clamp
+> and protein-held-out split. Pooled held-out AUC 0.6794 ± 0.0038 (6 layers) vs
+> 0.6799 ± 0.0019 (8 layers) — a **+0.0005** shift inside noise, with the
+> validation-pick seed identical at 0.6820. The deeper circuit reached a lower
+> *training* loss but no held-out gain, and its top-of-list triage precision was if
+> anything worse. Depth is saturated at six — that is our fourth measured null.
+
 **"Does this run on real hardware?"** ⭐ *(stronger answer than Round 1)*
 > Not yet, but the circuits are now 2–3 qubits — trivially small for a real
 > backend — so it's our immediate next step, not a distant one. We run on
@@ -216,7 +224,7 @@ cost you the room.
 > modelling decision — both grouped splits, the feature ablations, the burial
 > feature and its verification, the dense encoding, the measured nulls — we made
 > and measured. Happy to walk any file or re-run any ablation right now. The giveaway
-> that it isn't slop: we report three null results and a model that loses on AUC.
+> that it isn't slop: we report four null results and a model that loses on AUC.
 
 **"What if I give it a different virus?"** ⭐ *(answer changed — we built for this)*
 > That's exactly what the **Cross-virus** tab is for. We trained a second model
@@ -293,7 +301,7 @@ that's the Round 2 story in one click.
 4. The circuits — 2 and 3 qubits, dense encoding, re-uploading ansatz
 5. **Results** — both models beside their baselines, 3-seed spreads, chance line
 6. **The burial feature** — +0.027, all 4 proteins, verified join
-7. **What we measured** — feature count scales with data; three null results
+7. **What we measured** — feature count scales with data; four null results
 8. VQE — H₂ vs exact diagonalisation + the scaling ladder
 9. Limitations and roadmap (hardware run next) ← **do not cut**
 
