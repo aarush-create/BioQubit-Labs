@@ -2404,20 +2404,23 @@ function Experiments({ metrics }) {
         </div>
 
         <div className="sheet" style={{ marginTop: '1rem' }}>
-          <h4 style={{ margin: 0 }}>Searching for a seventh feature — two more measured nulls</h4>
+          <h4 style={{ margin: 0 }}>Pushing the model further — three more measured nulls</h4>
           <p className="small" style={{ marginTop: '0.4rem' }}>
-            With burial already capturing the structural signal, we screened two further ideas with a
-            fast leave-one-protein-out <b>classical pre-filter</b> (logistic regression and an MLP on
-            the held-out-virus split) before committing any quantum training — both came back null:
+            With burial already capturing the structural signal, we tried three more ways to move the
+            number — two screened with a fast leave-one-protein-out <b>classical pre-filter</b> (logistic
+            regression and an MLP on the held-out-virus split), one a direct <b>3-seed VQC A/B</b> — and
+            all three came back null:
           </p>
           <ul className="small" style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
             <li><b>AlphaFold pLDDT</b> as a 7th feature: MLP held-out AUC 0.7169 → 0.7132 (<b>−0.005</b>). Redundant with burial — confident regions are buried regions.</li>
             <li><b>Per-protein row balancing</b> (cap each virus's training rows): 0.7169 → 0.7179 (<b>+0.001</b>). The panel is already near-balanced (median 10.7k rows/protein, max 16.9k), so there was little to fix.</li>
+            <li><b>Deeper circuit</b> (8 layers vs the shipped 6), a 3-seed VQC A/B: pooled test AUC 0.6794 ± 0.0038 → 0.6799 ± 0.0019 (<b>+0.0005</b>), overlapping, with the validation-pick seed identical at 0.6820. Lower training loss, no held-out gain — saturation, not signal.</li>
           </ul>
           <p className="small" style={{ marginTop: '0.5rem', opacity: 0.8 }}>
-            Three independent measurements — pLDDT, balancing, and the BLOSUM clamp above — now say the
-            physicochemical/structural feature space is saturated: burial was the signal, and more of
-            the same adds nothing. Reported because a cheap, decisive null is still a result.
+            Four independent measurements — pLDDT, balancing, the BLOSUM clamp above, and circuit depth —
+            now say the same thing: the physicochemical/structural feature space, and the circuit
+            expressivity reading it, are saturated. Burial was the signal, and more of the same adds
+            nothing. Reported because a cheap, decisive null is still a result.
           </p>
         </div>
       </section>
