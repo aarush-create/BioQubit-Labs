@@ -162,6 +162,29 @@ a null is a result:
   the story differs — that is the generalist model above.)
 - Both are in `specialist_vs_pooled.py` and the training logs.
 
+### Round 3: the physicochemical/structural feature search is saturated
+
+With burial already capturing the structural signal, two further features were
+screened with a fast leave-one-protein-out *classical pre-filter* (logistic
+regression and an MLP on the held-out-virus split — `plddt_ablation.py` and
+`balance_ablation.py`) before committing any quantum training. Both are nulls:
+
+- **AlphaFold pLDDT** (per-residue confidence) as a 7th feature: MLP held-out AUC
+  0.7169 → 0.7132 (**−0.005**); logistic regression 0.7006 → 0.6975. pLDDT is
+  collinear with burial — confident residues are buried residues — so it adds
+  redundant noise, not signal.
+- **Per-protein row balancing** (cap each virus's training rows so no large
+  protein dominates): 0.7169 → 0.7179 (**+0.001**), inside noise. The panel is
+  already near-balanced (median 10,715 rows/protein, max 16,897), so there was
+  little imbalance to correct.
+
+Together with the BLOSUM-clamp null above, three independent measurements now say
+the same thing: on this held-out-virus task the physicochemical + structural
+feature space is **saturated**. Burial was the signal; more descriptors of
+packing, order, or chemistry add nothing. The only features that would move the
+number further are evolutionary (conservation/MSA), which lift every classical
+baseline equally and so raise the absolute AUC without changing the ranking.
+
 ### The lookup-oracle ceiling
 
 Looking up how the same substitution behaved in a *related genetic background*

@@ -177,11 +177,17 @@ that six qubits hits a barren plateau (0.558 AUC, loss stuck) where three do not
 ## The two models in the app
 
 The dashboard carries both. The **Score a variant** tab drives the SARS-CoV-2
-specialist; the **Other viruses** tab drives the cross-virus generalist — pick a
-virus and protein, a site (its wildtype is shown), and a new residue, and the
-model returns a score and the measured quantum state. The model card at the top
-is rendered live from `GET /metrics`, so the numbers on screen can always be
-checked against the API.
+specialist; the **Cross-virus model** tab drives the generalist — pick a virus and
+protein, a site (its wildtype is shown), and a new residue, and the model returns
+a score and the measured quantum state. Either model's result then drives the
+shared **circuit**, **epidemic scenario** and **quantum chemistry** tabs, and the
+cross-virus result also renders the protein's **AlphaFold 3D fold** (served from
+`public/structures/`, the same AF2 models the burial feature is computed from)
+with the mutated residue highlighted. The model card at the top is rendered live
+from `GET /metrics`, so the numbers on screen can always be checked against the
+API. An **Experiments** tab lays out the full measured record — baselines, the
+ablations that chose the features, and the reported nulls (pLDDT, balancing,
+BLOSUM clamp) that show the feature space is saturated.
 
 ---
 
