@@ -395,7 +395,6 @@ export default function App() {
   }, [activeTab]);
 
   /* Surveillance feed: sort + weak-evidence filter (see the ranked list). */
-  const [feedSort, setFeedSort] = useState('score');
   const [feedHideWeak, setFeedHideWeak] = useState(false);
   const [loading, setLoading] = useState(false);
   const [threatScore, setThreatScore] = useState(0.45);
@@ -1156,14 +1155,6 @@ export default function App() {
                   <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center',
                                 margin: '0 0 1rem' }}>
                     <label className="small" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                      Sort
-                      <select value={feedSort} onChange={e => setFeedSort(e.target.value)}
-                              style={{ padding: '0.25rem 0.4rem' }}>
-                        <option value="score">Highest unique-change score</option>
-                        <option value="default">As returned (ranked)</option>
-                      </select>
-                    </label>
-                    <label className="small" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                       <input type="checkbox" checked={feedHideWeak}
                              onChange={e => setFeedHideWeak(e.target.checked)} />
                       Hide multi-mutation (weak-evidence) rows
@@ -1174,10 +1165,6 @@ export default function App() {
                     {sentinel.records
                       .filter(r => r.max_score !== null)
                       .filter(r => !feedHideWeak || !r.high_divergence)
-                      .slice()
-                      .sort((a, b) => feedSort === 'score'
-                        ? ((b.top_distinguishing_score ?? -1) - (a.top_distinguishing_score ?? -1))
-                        : 0)
                       .map(r => (
                       <article key={r.accession} className="lane">
                         <div>
@@ -2424,6 +2411,24 @@ function Experiments({ metrics }) {
             0.68 rather than the ~0.95 a random split would report. A 10,000-sample paired bootstrap on
             the 946 SARS-CoV-2 rows puts each model's 95% interval ~0.06 wide, so on one test set the
             methods sit within sampling noise of each other.
+          </p>
+        </div>
+
+        <div className="sheet" style={{ marginTop: '1rem' }}>
+          <h4 style={{ margin: 0 }}>Searching for a seventh feature — two more measured nulls</h4>
+          <p className="small" style={{ marginTop: '0.4rem' }}>
+            With burial already capturing the structural signal, we screened two further ideas with a
+            fast leave-one-protein-out <b>classical pre-filter</b> (logistic regression and an MLP on
+            the held-out-virus split) before committing any quantum training — both came back null:
+          </p>
+          <ul className="small" style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
+            <li><b>AlphaFold pLDDT</b> as a 7th feature: MLP held-out AUC 0.7169 → 0.7132 (<b>−0.005</b>). Redundant with burial — confident regions are buried regions.</li>
+            <li><b>Per-protein row balancing</b> (cap each virus's training rows): 0.7169 → 0.7179 (<b>+0.001</b>). The panel is already near-balanced (median 10.7k rows/protein, max 16.9k), so there was little to fix.</li>
+          </ul>
+          <p className="small" style={{ marginTop: '0.5rem', opacity: 0.8 }}>
+            Three independent measurements — pLDDT, balancing, and the BLOSUM clamp above — now say the
+            physicochemical/structural feature space is saturated: burial was the signal, and more of
+            the same adds nothing. Reported because a cheap, decisive null is still a result.
           </p>
         </div>
       </section>
