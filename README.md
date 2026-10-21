@@ -187,7 +187,8 @@ with the mutated residue highlighted. The model card at the top is rendered live
 from `GET /metrics`, so the numbers on screen can always be checked against the
 API. An **Experiments** tab lays out the full measured record — baselines, the
 ablations that chose the features, and the reported nulls (pLDDT, balancing,
-BLOSUM clamp) that show the feature space is saturated.
+BLOSUM clamp, and circuit depth) that show the feature space — and the circuit
+reading it — is saturated.
 
 ---
 

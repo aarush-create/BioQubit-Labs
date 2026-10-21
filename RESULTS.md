@@ -177,10 +177,17 @@ regression and an MLP on the held-out-virus split — `plddt_ablation.py` and
   protein dominates): 0.7169 → 0.7179 (**+0.001**), inside noise. The panel is
   already near-balanced (median 10,715 rows/protein, max 16,897), so there was
   little imbalance to correct.
+- **Deeper circuit** (8 layers vs the shipped 6), a direct 3-seed VQC A/B on the
+  protein-held-out split: pooled test AUC 0.6794 ± 0.0038 (6 layers) → 0.6799 ±
+  0.0019 (8 layers), a **+0.0005** mean shift with fully overlapping ranges and an
+  *identical* 0.6820 for the validation-pick seed that would actually ship. The
+  deeper circuit reached a lower *training* loss but no held-out gain — the
+  signature of a saturated model with mild overfit — and its top-of-list triage
+  precision was if anything worse (p@25 0.48 vs 0.76). Depth is not the lever.
 
-Together with the BLOSUM-clamp null above, three independent measurements now say
+Together with the BLOSUM-clamp null above, four independent measurements now say
 the same thing: on this held-out-virus task the physicochemical + structural
-feature space is **saturated**. Burial was the signal; more descriptors of
+feature space — and the circuit expressivity reading it — is **saturated**. Burial was the signal; more descriptors of
 packing, order, or chemistry add nothing. The only features that would move the
 number further are evolutionary (conservation/MSA), which lift every classical
 baseline equally and so raise the absolute AUC without changing the ranking.
