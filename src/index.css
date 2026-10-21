@@ -32,8 +32,8 @@
   --rule:       #a7b4bf;
   --rule-soft:  #c5d0d8;
 
-  --assay:      #0d5f7c;   /* measured values — the one accent */
-  --assay-soft: #cfe3ea;
+  --assay:      #4b3f9e;   /* measured values — the one accent */
+  --assay-soft: #dcd7f2;
   --flag:       #8a5410;   /* read this carefully — warm, so it stands out */
   --flag-soft:  #f0e3cc;
   --alarm:      #8d2b2c;   /* something is actually broken */
@@ -63,8 +63,8 @@
   --rule:       #324249;
   --rule-soft:  #222e36;
 
-  --assay:      #5fd0e8;
-  --assay-soft: #11313d;
+  --assay:      #9b8cf0;
+  --assay-soft: #211b42;
   --flag:       #e0ae53;
   --flag-soft:  #2e2512;
   --alarm:      #ef7f72;

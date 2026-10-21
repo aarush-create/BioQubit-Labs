@@ -12,12 +12,12 @@ const PALETTES = {
   light: {
     ink: '#121617', ink2: '#4d5652', ink3: '#727b76',
     rule: '#bcc3b7', sheet: '#f6f7f3', paper: '#e8ebe4',
-    assay: '#194955', flag: '#7e510e', alarm: '#8a2d28', ok: '#2a6340',
+    assay: '#4b3f9e', flag: '#7e510e', alarm: '#8a2d28', ok: '#2a6340',
   },
   dark: {
     ink: '#e7ece9', ink2: '#9eaaa6', ink3: '#76827e',
     rule: '#2d373c', sheet: '#192026', paper: '#11161a',
-    assay: '#74c6d8', flag: '#dca94c', alarm: '#e8786d', ok: '#67bd87',
+    assay: '#9b8cf0', flag: '#dca94c', alarm: '#e8786d', ok: '#67bd87',
   },
 };
 
@@ -2239,7 +2239,7 @@ function Experiments({ metrics }) {
       </nav>
 
       {/* ---- the two models ---- */}
-      <section className="section" id="exp-models">
+      <section className="section" id="exp-models" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 64px)' }}>
         <h3>The two shipped models</h3>
         <p className="section-lede">
           They answer different questions on different data, so their scores are not comparable: the
@@ -2260,7 +2260,7 @@ function Experiments({ metrics }) {
       </section>
 
       {/* ---- Model 1 baselines ---- */}
-      <section className="section" id="exp-baselines">
+      <section className="section" id="exp-baselines" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 64px)' }}>
         <h3>Model 1 — SARS-CoV-2, versus classical baselines</h3>
         <p className="section-lede">
           Same four features, same site-grouped split, same 946 held-out mutations. We report the gap
@@ -2313,7 +2313,7 @@ function Experiments({ metrics }) {
       </section>
 
       {/* ---- Round 2 experiments ---- */}
-      <section className="section" id="exp-round2">
+      <section className="section" id="exp-round2" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 64px)' }}>
         <h3>Round 2 experiments</h3>
 
         <div className="sheet" style={{ marginBottom: '1rem' }}>
@@ -2423,7 +2423,7 @@ function Experiments({ metrics }) {
       </section>
 
       {/* ---- Round 1 ablations ---- */}
-      <section className="section" id="exp-round1">
+      <section className="section" id="exp-round1" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 64px)' }}>
         <h3>Round 1 ablations (what chose the design)</h3>
         <p className="section-lede">Still valid; the shipped circuit has since moved to a dense encoding, but the feature conclusions carry over.</p>
 
