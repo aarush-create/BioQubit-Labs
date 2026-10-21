@@ -395,7 +395,6 @@ export default function App() {
   }, [activeTab]);
 
   /* Surveillance feed: sort + weak-evidence filter (see the ranked list). */
-  const [feedHideWeak, setFeedHideWeak] = useState(false);
   const [loading, setLoading] = useState(false);
   const [threatScore, setThreatScore] = useState(0.45);
   const [r0, setR0] = useState(1.2);
@@ -1152,19 +1151,9 @@ export default function App() {
                     evidence.
                   </p>
 
-                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center',
-                                margin: '0 0 1rem' }}>
-                    <label className="small" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                      <input type="checkbox" checked={feedHideWeak}
-                             onChange={e => setFeedHideWeak(e.target.checked)} />
-                      Hide multi-mutation (weak-evidence) rows
-                    </label>
-                  </div>
-
                   <div className="lanes">
                     {sentinel.records
                       .filter(r => r.max_score !== null)
-                      .filter(r => !feedHideWeak || !r.high_divergence)
                       .map(r => (
                       <article key={r.accession} className="lane">
                         <div>
@@ -1402,12 +1391,14 @@ export default function App() {
                     </dl>
                   </div>
                   </section>
+                </div>
+              </div>
 
-                  <section className="section">
-                  <h3>The real structure it measures from</h3>
-                  <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
+              <section className="section">
+              <h3>The real structure it measures from</h3>
+              <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden', maxWidth: '820px', margin: '0 auto' }}>
                     {isFolding ? (
-                      <div style={{ height: 'clamp(220px, 60vw, 280px)', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '1rem' }}>
+                      <div style={{ height: 'clamp(300px, 42vw, 440px)', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '1rem' }}>
                         <div>
                           <div className="mono" style={{ fontSize: 'var(--t-sm)' }}>Loading the structure</div>
                           <div className="small" style={{ marginTop: '0.3rem' }}>
@@ -1417,7 +1408,7 @@ export default function App() {
                         </div>
                       </div>
                     ) : (
-                      <div style={{ position: 'relative', height: 'clamp(220px, 60vw, 280px)', overflow: 'hidden' }}>
+                      <div style={{ position: 'relative', height: 'clamp(300px, 42vw, 440px)', overflow: 'hidden' }}>
                         <iframe
                           key={`${pdbInput}-${theme}`}
                           src={viewerSrc(pdbInput, theme, false)}
@@ -1444,9 +1435,7 @@ export default function App() {
                       contact — was measured from this. Measured, not predicted.
                     </div>
                   </div>
-                  </section>
-                </div>
-              </div>
+              </section>
             </section>
           )}
 
@@ -2019,12 +2008,12 @@ function PanelScorer({ API, theme, onScore, onJump }) {
   // radar — the same features the cross-virus circuit reads.
   const pf = result && result.features;
   const panelFeatureData = pf ? [
-    { subject: 'How odd the swap is', A: Math.max(0, Math.min(100, ((pf.blosum62 + 4) / 15) * 100)) },
+    { subject: 'Swap oddness', A: Math.max(0, Math.min(100, ((pf.blosum62 + 4) / 15) * 100)) },
     { subject: 'Original size', A: Math.max(0, Math.min(100, ((pf.wt_volume - 60) / 168) * 100)) },
-    { subject: 'Change in size', A: Math.max(0, Math.min(100, ((pf.delta_volume + 170) / 340) * 100)) },
-    { subject: 'Water-liking (orig.)', A: Math.max(0, Math.min(100, ((pf.wt_hydropathy + 4.5) / 9) * 100)) },
-    { subject: 'Change in water-liking', A: Math.max(0, Math.min(100, ((pf.delta_hydropathy + 9) / 18) * 100)) },
-    { subject: 'How buried it sits', A: Math.max(0, Math.min(100, (pf.burial / 40) * 100)) },
+    { subject: 'Size change', A: Math.max(0, Math.min(100, ((pf.delta_volume + 170) / 340) * 100)) },
+    { subject: 'Water-liking', A: Math.max(0, Math.min(100, ((pf.wt_hydropathy + 4.5) / 9) * 100)) },
+    { subject: 'Δ water-liking', A: Math.max(0, Math.min(100, ((pf.delta_hydropathy + 9) / 18) * 100)) },
+    { subject: 'How buried', A: Math.max(0, Math.min(100, (pf.burial / 40) * 100)) },
   ] : [];
 
   const wtAt = (s) => (sites.find(x => String(x.site) === String(s)) || {}).wildtype;
