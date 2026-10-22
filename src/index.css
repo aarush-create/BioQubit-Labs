@@ -436,6 +436,15 @@ input[type='range'] { width: 100%; accent-color: var(--assay); padding: 0; borde
   max-width: 24ch; line-height: 1.5;
 }
 
+/* hero stats double as navigation into the model */
+.figure-stat.is-jump {
+  cursor: pointer; border-radius: 12px; padding: 0.6rem; margin: -0.6rem;
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+.figure-stat.is-jump:hover { background: var(--assay-soft); transform: translateY(-2px); }
+.figure-stat.is-jump:hover .figure-l { text-decoration: underline; text-underline-offset: 2px; }
+.figure-stat.is-jump:focus-visible { outline: 2px solid var(--assay); outline-offset: 2px; }
+
 /* the single reveal */
 .reveal {
   opacity: 0; transform: translateY(14px);
