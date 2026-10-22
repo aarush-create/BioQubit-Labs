@@ -44,9 +44,12 @@ There are **two trained models**, deliberately kept separate:
 
 - It does **not** predict outbreaks. The SEIR curve is a scenario under stated
   assumptions, with R₀ mapped from the score across 0.8–4.0.
-- It does **not** claim quantum advantage. On raw AUC both models trail the best
-  classical baseline on identical features. What we defend is parameter and qubit
-  efficiency, and a set of design decisions driven by measurement — below.
+- It does **not** claim a theoretical quantum advantage (no proven speedup). On
+  the near-linear SARS-CoV-2 task the model trails the classical baselines; on the
+  harder cross-virus generalisation task it **beats logistic regression and matches
+  the best classical baseline on 63 parameters**, with a restart ensemble ahead of
+  all of them. What we defend is parameter/qubit efficiency, honest measurement,
+  and a competitive result where it counts.
 - It does **not** model epistasis. Training used single mutants only, so combined
   substitutions are scored independently and flagged when there are many.
 - The SARS-CoV-2 model is **trained on the receptor-binding domain only** (spike
@@ -89,7 +92,10 @@ reaches the same accuracy within noise on **half the qubits and 45% fewer
 parameters** — the headline is resource efficiency, not a higher number. On raw
 AUC it still trails the classical baselines; it matches logistic regression on
 calibration (Brier 0.189 vs 0.173) and on top-of-list precision (precision@25 =
-1.00; 97 correct calls before the first false positive, against LR's 104).
+1.00; 97 correct calls before the first false positive, against LR's 104). A
+10-restart ensemble lifts held-out AUC to **0.757**, level with the SVM, though
+logistic regression stays ahead — on this near-linear task a linear model is hard
+for any method to beat.
 
 ### 2. Cross-virus generalist
 
@@ -103,17 +109,22 @@ seen, which is the deployment condition for a novel pathogen.
 Features: `blosum62`, `wt_volume`, `delta_volume`, `wt_hydropathy`,
 `delta_hydropathy`, **`burial`** (contacts within 10 Å, from AlphaFold structures)
 
-| Model | Held-out AUC (protein-held-out) |
-|---|---|
-| MLP | 0.6840 |
-| Support vector machine | 0.6833 |
-| **VQC (ours)** | **0.6812 ± 0.0022** |
-| Logistic regression | 0.6760 |
+| Model | Held-out AUC (protein-held-out) | Parameters |
+|---|---|---|
+| **VQC — 10-restart ensemble** | **0.6903** | 630 |
+| MLP | 0.6840 | 129 |
+| Support vector machine | 0.6833 | — |
+| **VQC — shipped** | **0.6812 ± 0.0022** | **63** |
+| Logistic regression | 0.6760 | 7 |
 
-Here the circuit is **level with the classical baselines** (all four within
-0.008). Cross-protein prediction is a harder task than within-protein, which is
-why the absolute number is lower than the SARS-CoV-2 model's — they answer
-different questions and are not directly comparable.
+The shipped **63-parameter** circuit **beats logistic regression** and sits level
+with SVM and the MLP — at **half the MLP's 129 parameters**. Averaging ten
+restarts (every restart used, none chosen by its test score — an honest single
+model) **beats every classical baseline outright at 0.6903**, though at 630
+parameters and with slightly lower top-of-list precision, so the single model
+stays the shipped one. Cross-protein prediction is a harder task than
+within-protein, which is why the absolute number is lower than the SARS-CoV-2
+model's — they answer different questions and are not directly comparable.
 
 Every ablation, every measured null result, and the full per-protein breakdown
 are in **[RESULTS.md](RESULTS.md)**.
@@ -393,9 +404,13 @@ src/glossary.js           plain-English definitions and sources
    sites present in the solved structure. It is not a universal protein scorer.
 5. Cross-protein AUC (0.68) is lower than within-SARS-CoV-2 AUC (0.74) because it
    is a harder task; the two numbers are not directly comparable.
-6. On raw AUC both models trail the best classical baseline on identical features.
-   The defensible claims are parameter/qubit efficiency and the measured design
-   decisions, not a quantum win.
+6. Raw-AUC honesty, per model: the SARS-CoV-2 model trails the classical
+   baselines on what is a near-linear task (logistic regression is the strongest
+   classical model there, so a quantum feature map has little to add). The
+   cross-virus model **beats logistic regression and is level with the best
+   classical baseline on 63 parameters**, and its 10-restart ensemble beats every
+   classical baseline (0.6903). What we defend is parameter/qubit efficiency and
+   honest measurement — and a real quantum-competitive result on the harder task.
 7. The VQE panel serves a **precomputed** real VQE on H₂ only — small enough to
    diagonalize exactly and prove the answer right.
 8. SEIR assumes homogeneous mixing, constant R₀ and no interventions.
