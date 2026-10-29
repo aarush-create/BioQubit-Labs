@@ -6,28 +6,18 @@ import {
   AreaChart, Area
 } from 'recharts';
 
-// --- NEW IMPORTS ---
-import ChemicalEvaluation from './components/ChemicalEvaluation';
-import ArchitectureDiagram from './components/ArchitectureDiagram';
-import FewShotCurve from './components/FewShotCurve';
-import HardwareTab from './components/HardwareTab';
-import chemicalData from './data/chemical-evaluation.json';
-import fewshotData from './data/fewshot-results.json';
-import qpuData from './data/qpu-run.json';
-// -------------------
-
 /* Chart colours. Recharts needs literal values, not CSS vars, so the two
    themes are mirrored here from index.css and picked at render time. */
 const PALETTES = {
   light: {
     ink: '#121617', ink2: '#4d5652', ink3: '#727b76',
     rule: '#bcc3b7', sheet: '#f6f7f3', paper: '#e8ebe4',
-    assay: '#4b3f9e', flag: '#7e510e', alarm: '#8a2d28', ok: '#2a6340',
+    assay: '#194955', flag: '#7e510e', alarm: '#8a2d28', ok: '#2a6340',
   },
   dark: {
     ink: '#e7ece9', ink2: '#9eaaa6', ink3: '#76827e',
     rule: '#2d373c', sheet: '#192026', paper: '#11161a',
-    assay: '#9b8cf0', flag: '#dca94c', alarm: '#e8786d', ok: '#67bd87',
+    assay: '#74c6d8', flag: '#dca94c', alarm: '#e8786d', ok: '#67bd87',
   },
 };
 
@@ -57,31 +47,6 @@ const viewerSrc = (pdb, theme, full) =>
   `https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?pdbid=${pdb || '6m0j'}`
   + `&showcommand=0${full ? '' : '&showmenu=0'}&showtitle=0`
   + (theme === 'dark' ? '&bkgdcolor=black' : '');
-
-/* iCn3D can load an AlphaFold predicted model straight from its UniProt
-   accession (afid=). We use this for the cross-virus proteins, whose folds we
-   already use to compute the burial feature — clearly labelled as predicted,
-   unlike the one experimentally-solved structure (6M0J) on the SARS tab. */
-const viewerAf = (acc, theme, full) =>
-  `https://www.ncbi.nlm.nih.gov/Structure/icn3d/full.html?afid=${acc}`
-  + `&showcommand=0${full ? '' : '&showmenu=0'}&showtitle=0`
-  + (theme === 'dark' ? '&bkgdcolor=black' : '');
-
-/* Per-protein structures for the cross-virus panel, keyed by ProteinGym
-   DMS_id. These are VERIFIED against the AlphaFold database (check_alphafold.py)
-   — only proteins that actually have a public AF model are listed, because
-   AlphaFold DB's coverage of viral proteins is sparse (most of these 17 are not
-   in it). Proteins absent here show a label instead of an empty viewer. Add
-   { pdb: '1abc' } to point one at an experimental PDB structure. */
-const PANEL_STRUCT = {
-  "NCAP_I34A1_Doud_2015": { uniprot: "P03466" },   // influenza A nucleoprotein
-  "PA_I34A1_Wu_2015": { uniprot: "P03433" },       // influenza A PA polymerase
-};
-function panelStructFor(dmsId) {
-  if (!dmsId) return null;
-  const o = PANEL_STRUCT[dmsId];
-  return o && (o.uniprot || o.pdb) ? o : null;
-}
 
 /* The backend's keys are snake_case identifiers; these are what a reader
    should see on the model card. */
@@ -385,27 +350,6 @@ export default function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState('sentinel');
-
-  /* Deep-link the active tab through the URL hash, so a judge can link to a
-     specific tab and a refresh does not snap back to the feed. */
-  useEffect(() => {
-    // --- ADDED NEW TABS TO VALIDATION ---
-    const ids = ['sentinel', 'genomics', 'panel', 'vqc', 'seir', 'vqe', 'experiments', 'chemical', 'fewshot', 'hardware'];
-    const read = () => {
-      const h = window.location.hash.replace('#', '');
-      if (ids.includes(h)) setActiveTab(h);
-    };
-    read();
-    window.addEventListener('hashchange', read);
-    return () => window.removeEventListener('hashchange', read);
-  }, []);
-  useEffect(() => {
-    if (window.location.hash.replace('#', '') !== activeTab) {
-      try { window.history.replaceState(null, '', `#${activeTab}`); } catch { /* ignore */ }
-    }
-  }, [activeTab]);
-
-  /* Surveillance feed: sort + weak-evidence filter (see the ranked list). */
   const [loading, setLoading] = useState(false);
   const [threatScore, setThreatScore] = useState(0.45);
   const [r0, setR0] = useState(1.2);
@@ -499,7 +443,7 @@ export default function App() {
       }
 
       const data = await res.json();
-      setResult({ ...data, _model: 'sars' });
+      setResult(data);
       setThreatScore(data.threat_score);
 
       /* R0 is a SCENARIO parameter chosen from the score, not a prediction.
@@ -521,36 +465,6 @@ export default function App() {
     } finally {
       setLoading(false);
       setIsFolding(false);
-    }
-  };
-
-  /* The cross-virus model shares the SAME circuit / epidemic / chemistry tabs
-     as the SARS-CoV-2 model. Scoring in the cross-virus panel writes its
-     result into the shared state those tabs read — tagged _model:'panel' so
-     the readout words itself correctly — instead of drawing a second set of
-     panels inside the cross-virus tab. */
-  const applyPanelScore = async (d) => {
-    setApiError(null);
-    setResult({
-      ...d,
-      _model: 'panel',
-      driver_mutation: d.mutation,
-      threat_score: d.score,
-      mutations: [],
-    });
-    setThreatScore(d.score);
-    const scenarioR0 = 0.8 + d.score * 3.2;
-    setR0(scenarioR0);
-    setSeir(null);
-    try {
-      const sr = await fetch(`${API}/seir`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ r0: scenarioR0, days: 180 }),
-      });
-      if (sr.ok) setSeir(await sr.json());
-    } catch {
-      /* the epidemic tab falls back to its idle state if this fails */
     }
   };
 
@@ -715,9 +629,6 @@ export default function App() {
 
   const feedStatus = sentinel?.feed_status;
   const outOfDomain = result?.distribution && !result.distribution.in_distribution;
-  /* Which model produced the result now in shared state. The circuit, epidemic
-     and readout sections below serve both models and word themselves from this. */
-  const panelMode = result?._model === 'panel';
 
   const TABS = [
     { id: 'sentinel', label: 'Surveillance feed' },
@@ -726,11 +637,6 @@ export default function App() {
     { id: 'vqc', label: 'The circuit' },
     { id: 'seir', label: 'Epidemic scenario' },
     { id: 'vqe', label: 'Quantum chemistry' },
-    { id: 'experiments', label: 'Experiments' },
-    // --- NEW TABS ---
-    { id: 'chemical', label: 'Chemical evaluation' },
-    { id: 'fewshot', label: 'Few-shot benchmark' },
-    { id: 'hardware', label: 'IBM hardware' },
   ];
 
   return (
@@ -772,31 +678,25 @@ export default function App() {
             <p className="small" style={{ marginTop: '0.4rem' }}>
               Every method below got the same four numbers per mutation and the same training data,
               then was tested on {metrics.n_test} mutations <Term id="heldout">none of them had ever
-              seen</Term>. The bar is <Term id="rocauc">ROC-AUC</Term>: the chance a method ranks a
-              real binder above a real non-binder (0.5 is a coin flip, 1.0 is perfect). The figure
-              on the right is plain <b>accuracy</b> — the share it simply got right.
+              seen</Term>. The score is <Term id="rocauc">ROC-AUC</Term>: the chance a method ranks a
+              real binder above a real non-binder. 0.5 is a coin flip; 1.0 is perfect.
             </p>
 
             <div className="lanes" style={{ marginTop: '1.25rem' }}>
               {Object.entries({
-                [`VQC (ours, ${metrics.vqc?.n_qubits ?? 2} qubits)`]: { auc: metrics.vqc?.roc_auc, acc: metrics.vqc?.accuracy },
+                [`VQC (ours, ${metrics.vqc?.n_qubits ?? 2} qubits)`]: metrics.vqc?.roc_auc,
                 ...Object.fromEntries(Object.entries(metrics.classical_baselines_same_features || {})
-                  .map(([k, v]) => [BASELINE_NAME[k] || k.replace(/_/g, ' '), { auc: v.roc_auc, acc: v.accuracy }]))
+                  .map(([k, v]) => [BASELINE_NAME[k] || k.replace(/_/g, ' '), v.roc_auc]))
               })
-                .filter(([, v]) => typeof v.auc === 'number')
-                .sort((a, b) => b[1].auc - a[1].auc)
-                .map(([name, m]) => (
-                  <div key={name} className="lane" style={{ gridTemplateColumns: '1fr 7rem', alignItems: 'center' }}>
+                .filter(([, v]) => typeof v === 'number')
+                .sort((a, b) => b[1] - a[1])
+                .map(([name, auc]) => (
+                  <div key={name} className="lane" style={{ gridTemplateColumns: '1fr 6rem', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: 'var(--t-sm)', marginBottom: '0.35rem' }}>{name}</div>
-                      <Bar value={(m.auc - 0.5) / 0.5} />
+                      <Bar value={(auc - 0.5) / 0.5} />
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="mono" style={{ color: C.assay }}>{m.auc.toFixed(4)}</div>
-                      <div className="mono small" style={{ opacity: 0.6 }}>
-                        {typeof m.acc === 'number' ? `acc ${(m.acc * 100).toFixed(1)}%` : ''}
-                      </div>
-                    </div>
+                    <div className="mono" style={{ textAlign: 'right', color: C.assay }}>{auc.toFixed(4)}</div>
                   </div>
                 ))}
             </div>
@@ -809,23 +709,17 @@ export default function App() {
             </p>
 
             <p className="note" style={{ marginTop: '1.25rem' }}>
-              <b>Why the bar is AUC, not accuracy.</b> 68% of the mutations in this data still bind,
-              so a model that simply answered "yes" every time would already look ~68% accurate
-              while being useless — notice every accuracy on the right sits near that base rate.
-              ROC-AUC cannot be gamed that way, so we rank on it. On AUC our quantum model comes
-              fourth of five here, but it reaches that on just {metrics.vqc?.n_qubits} qubits and{' '}
-              {metrics.vqc?.n_parameters} parameters — the Round-1 accuracy at half the width. Our
-              cross-virus model (its own tab) <b>beats logistic regression and matches the best
-              classical baselines</b> across 12 organisms, and a 10-restart ensemble beats every one
-              of them. We print the gap rather than bury it.
+              <b>Why we quote this and not accuracy.</b> 68% of the mutations in this data still
+              bind, so a model that simply answered "yes, it binds" every single time would already
+              look 68% accurate while being completely useless. ROC-AUC cannot be gamed that way. On
+              it, our quantum model comes fourth of five here — but it reaches that on just{' '}
+              {metrics.vqc?.n_qubits} qubits and {metrics.vqc?.n_parameters} parameters, the same
+              accuracy as our earlier four-qubit model at half the width. Our cross-virus model (the
+              Cross-virus tab) is level with all three classical methods across 12 organisms. We
+              print the gap rather than bury it.
             </p>
 
             <dl className="facts" style={{ marginTop: '1rem' }}>
-              <div>
-                <dt>Held-out AUC · accuracy</dt>
-                <dd className="mono">{metrics.vqc?.roc_auc?.toFixed(4)}
-                    {typeof metrics.vqc?.accuracy === 'number' && <> · {(metrics.vqc.accuracy * 100).toFixed(1)}%</>}</dd>
-              </div>
               <div>
                 <dt>Circuit</dt>
                 <dd>{metrics.vqc?.n_qubits} qubits · {metrics.vqc?.n_layers} layers ·{' '}
@@ -931,11 +825,7 @@ export default function App() {
               <button className="pill pill-solid" onClick={() => {
                 setActiveTab('genomics');
                 document.getElementById('instrument')?.scrollIntoView({ behavior: 'smooth' });
-              }}>Score a SARS-CoV-2 variant</button>
-              <button className="pill" onClick={() => {
-                setActiveTab('panel');
-                document.getElementById('instrument')?.scrollIntoView({ behavior: 'smooth' });
-              }}>Score across 12 viruses</button>
+              }}>Score a variant</button>
               <button className="pill" onClick={() => {
                 setActiveTab('sentinel');
                 document.getElementById('instrument')?.scrollIntoView({ behavior: 'smooth' });
@@ -944,28 +834,20 @@ export default function App() {
 
             <div className="figures">
               {[
-                ['146,161', 'real mutations', 'Measured in laboratories across 12 viral organisms, never predicted', 'experiments'],
-                ['2–3', 'qubits', 'Two features per qubit — the SARS-CoV-2 model runs on 2, the cross-virus model on 3', 'vqc'],
+                ['146,161', 'real mutations', 'Measured in laboratories across 12 viral organisms, never predicted'],
+                ['2–3', 'qubits', 'Two features per qubit — the SARS-CoV-2 model runs on 2, the cross-virus model on 3'],
                 [metrics?.vqc?.roc_auc ? metrics.vqc.roc_auc.toFixed(3) : '0.742', 'ranking score',
-                 'How well it orders mutations it never saw, on identical features and an identical split', 'experiments'],
-                ['12', 'viral organisms', 'One model generalises from SARS-CoV-2 to influenza, HIV, dengue and more', 'panel'],
-              ].map(([n, label, note, target], i) => {
-                const go = () => {
-                  setActiveTab(target);
-                  document.getElementById('instrument')?.scrollIntoView({ behavior: 'smooth' });
-                };
-                return (
+                 'How well it orders mutations it never saw, on identical features and an identical split'],
+                ['12', 'viral organisms', 'One model generalises from SARS-CoV-2 to influenza, HIV, dengue and more'],
+              ].map(([n, label, note], i) => (
                 <Reveal key={label} delay={i * 70}>
-                  <div className="figure-stat is-jump" role="button" tabIndex={0}
-                       onClick={go}
-                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}>
+                  <div className="figure-stat">
                     <div className="figure-n">{n}</div>
                     <div className="figure-l">{label}</div>
                     <div className="figure-note">{note}</div>
                   </div>
                 </Reveal>
-                );
-              })}
+              ))}
             </div>
           </div>
         </section>
@@ -973,36 +855,21 @@ export default function App() {
         <section className="shell hero" id="instrument">
 
           <div className="readout">
-            {result && (
-              <div style={{ marginBottom: '0.6rem' }}>
-                <span style={{ display: 'inline-block', padding: '0.15rem 0.6rem', borderRadius: 999,
-                               border: '1px solid rgba(127,127,127,0.35)', fontSize: '0.75rem',
-                               fontWeight: 600, letterSpacing: '0.02em' }}>
-                  {panelMode ? 'Cross-virus model · 3 qubits' : 'SARS-CoV-2 model · 2 qubits'}
-                </span>
-              </div>
-            )}
             <div className="readout-top">
               {result ? (
                 <>
                   <div>
                     <div className="readout-label">
-                      {panelMode
-                        ? <>How likely it stays functional · {result.virus} · {result.driver_mutation}</>
-                        : <>How well it still grabs ACE2 · {result.driver_mutation}</>}
+                      How well it still grabs ACE2 · {result.driver_mutation}
                     </div>
                     <div className="readout-value">
                       <CountUp value={result.threat_score} />
-                      {result.threat_score_stderr != null && (
-                        <span className="readout-err" title="How much the score wobbles between repeated quantum measurements">± {result.threat_score_stderr.toFixed(3)}</span>
-                      )}
+                      <span className="readout-err" title="How much the score wobbles between repeated quantum measurements">± {result.threat_score_stderr.toFixed(3)}</span>
                     </div>
                   </div>
                   <ResidueSwap code={result.driver_mutation} />
                   <div className="readout-meta">
-                    {panelMode
-                      ? <>{result.n_qubits} qubits · cross-virus model · R₀ scenario {r0.toFixed(2)}</>
-                      : <>{result.quantum.shots} quantum measurements · R₀ scenario {r0.toFixed(2)}</>}
+                    {result.quantum.shots} quantum measurements · R₀ scenario {r0.toFixed(2)}
                     {seir && <> · peak day {seir.indicators.peak_day}</>}
                   </div>
                 </>
@@ -1023,21 +890,11 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                  <p className="small" style={{ marginTop: '0.7rem', maxWidth: '58ch' }}>
-                    Those are SARS-CoV-2 examples. To score influenza, HIV-1, dengue and nine more
-                    organisms, open the{' '}
-                    <button type="button" onClick={() => setActiveTab('panel')}
-                            style={{ background: 'none', border: 0, padding: 0, font: 'inherit',
-                                     color: 'var(--assay)', textDecoration: 'underline', cursor: 'pointer' }}>
-                      Cross-virus model
-                    </button>{' '}
-                    tab.
-                  </p>
                 </div>
               )}
             </div>
 
-            {!panelMode && <DomainRuler mutations={result?.mutations ?? []} />}
+            <DomainRuler mutations={result?.mutations ?? []} />
 
             {result && (
               <div style={{ marginTop: '0.35rem' }}>
@@ -1070,12 +927,9 @@ export default function App() {
 
         {/* ------------------------------------------------------------ tabs */}
         <div className="shell print-hidden" style={{ marginTop: '2.25rem' }}>
-          <div className="rail" role="tablist"
-               style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto',
-                        WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', scrollSnapType: 'x proximity' }}>
+          <div className="rail" role="tablist">
             {TABS.map(t => (
               <button key={t.id} role="tab" aria-selected={activeTab === t.id}
-                      style={{ flex: '0 0 auto', whiteSpace: 'nowrap', scrollSnapAlign: 'start' }}
                       onClick={() => setActiveTab(t.id)}>{t.label}</button>
             ))}
           </div>
@@ -1177,9 +1031,7 @@ export default function App() {
                   </p>
 
                   <div className="lanes">
-                    {sentinel.records
-                      .filter(r => r.max_score !== null)
-                      .map(r => (
+                    {sentinel.records.filter(r => r.max_score !== null).map(r => (
                       <article key={r.accession} className="lane">
                         <div>
                           <div className="lane-acc">{r.accession}</div>
@@ -1315,23 +1167,6 @@ export default function App() {
                     </p>
                   )}
 
-                  {result && !panelMode && (
-                    <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => document.getElementById('sars-structure')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                        The 3D structure ↓
-                      </button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('vqc')}>
-                        See the circuit →
-                      </button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('seir')}>
-                        Epidemic scenario →
-                      </button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('vqe')}>
-                        Quantum chemistry →
-                      </button>
-                    </div>
-                  )}
-
                   {refList.some(r => !r.in_distribution) && (
                     <p className="note">
                       {refList.filter(r => !r.in_distribution).length} other viruses are loaded —
@@ -1358,10 +1193,10 @@ export default function App() {
                   <section className="section">
                   <h3>What the model actually looks at</h3>
                   <p className="section-lede">
-                    Every mutation is boiled down to four numbers, dense-encoded two to a{' '}
-                    <Term id="qubit">qubit</Term> so they ride on just two. We started with eight and
-                    removed them one at a time (<Term id="ablation">an ablation</Term>); these four
-                    were the ones doing the work.
+                    Every mutation is boiled down to four numbers — one per{' '}
+                    <Term id="qubit">qubit</Term>. We started with eight and removed them one at a
+                    time (<Term id="ablation">an ablation</Term>); these four were the ones doing
+                    the work.
                   </p>
                   <div className="figure">
                     {featureData.length === 0 ? (
@@ -1419,14 +1254,12 @@ export default function App() {
                     </dl>
                   </div>
                   </section>
-                </div>
-              </div>
 
-              <section className="section" id="sars-structure" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 16px)' }}>
-              <h3>The real structure it measures from</h3>
-              <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden', maxWidth: '820px', margin: '0 auto' }}>
+                  <section className="section">
+                  <h3>The real structure it measures from</h3>
+                  <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
                     {isFolding ? (
-                      <div style={{ height: 'clamp(300px, 42vw, 440px)', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '1rem' }}>
+                      <div style={{ height: 'clamp(220px, 60vw, 280px)', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '1rem' }}>
                         <div>
                           <div className="mono" style={{ fontSize: 'var(--t-sm)' }}>Loading the structure</div>
                           <div className="small" style={{ marginTop: '0.3rem' }}>
@@ -1436,7 +1269,7 @@ export default function App() {
                         </div>
                       </div>
                     ) : (
-                      <div style={{ position: 'relative', height: 'clamp(300px, 42vw, 440px)', overflow: 'hidden' }}>
+                      <div style={{ position: 'relative', height: 'clamp(220px, 60vw, 280px)', overflow: 'hidden' }}>
                         <iframe
                           key={`${pdbInput}-${theme}`}
                           src={viewerSrc(pdbInput, theme, false)}
@@ -1463,7 +1296,9 @@ export default function App() {
                       contact — was measured from this. Measured, not predicted.
                     </div>
                   </div>
-              </section>
+                  </section>
+                </div>
+              </div>
             </section>
           )}
 
@@ -1473,30 +1308,22 @@ export default function App() {
               <div className="panel-head">
                 <h2>The circuit</h2>
                 <p className="lede">
-                  A handful of <Term id="qubit">qubits</Term> can be in many settings at once. The
+                  Four <Term id="qubit">qubits</Term> can be in 16 different settings at once. The
                   chart shows how much of the quantum state is sitting in each of those{' '}
-                  <Term id="basisstate">settings</Term> — taken from the same circuit that produced
-                  the score above, not drawn for show.
+                  <Term id="basisstate">16 settings</Term> — taken from the same circuit that
+                  produced the score above, not drawn for show.
                 </p>
                 <p className="small" style={{ marginTop: '0.5rem', maxWidth: '70ch' }}>
-                  Method: a <Term id="reupload">data re-uploading</Term> circuit; the score is read
-                  from the full distribution over those outcomes, not a single measurement. The
-                  SARS-CoV-2 model runs on 2 qubits, the cross-virus model on 3.
+                  Method: a <Term id="reupload">data re-uploading</Term> circuit; the score is the{' '}
+                  <Term id="expval">expectation value</Term> of <Term id="pauliz">Pauli-Z</Term> on
+                  the first qubit.
                 </p>
               </div>
 
               <div className="figure">
                 {quantumWaveformData.length === 0 ? (
-                  <div style={{ height: 'clamp(230px, 62vw, 320px)', display: 'grid', placeItems: 'center', textAlign: 'center', padding: '1rem' }}>
-                    <div>
-                      <span className="muted">
-                        {waking ? `Waking the server (~${wakeSeconds}s)…` : 'Score a mutation to see the quantum state.'}
-                      </span>
-                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '0.8rem' }}>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('genomics')}>Score a SARS-CoV-2 variant</button>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('panel')}>Score a cross-virus variant</button>
-                      </div>
-                    </div>
+                  <div style={{ height: 'clamp(230px, 62vw, 320px)', display: 'grid', placeItems: 'center' }}>
+                    <span className="muted">Score a mutation to see the quantum state.</span>
                   </div>
                 ) : (
                   <div style={{ width: '100%', height: 'clamp(250px, 64vw, 340px)', minWidth: 0 }}>
@@ -1521,11 +1348,6 @@ export default function App() {
                   </div>
                 )}
                 <div className="figure-cap">
-                  {quantumWaveformData.length > 0 && (
-                    <>{quantumWaveformData.length} outcomes from a{' '}
-                    {Math.round(Math.log2(quantumWaveformData.length))}-qubit circuit ·{' '}
-                    {panelMode ? 'cross-virus model' : 'SARS-CoV-2 model'}
-                    {result?.driver_mutation ? ` · ${result.driver_mutation}` : ''} · </>)}
                   Computed on the server by the real circuit, not drawn in your browser.
                 </div>
               </div>
@@ -1533,7 +1355,7 @@ export default function App() {
           )}
 
           {/* ===================================== 3b. OTHER VIRUSES (panel) */}
-          {activeTab === 'panel' && <PanelScorer API={API} theme={theme} onScore={applyPanelScore} onJump={setActiveTab} />}
+          {activeTab === 'panel' && <PanelScorer API={API} />}
 
           {/* ================================================ 4. SCENARIO */}
           {activeTab === 'seir' && (
@@ -1545,13 +1367,9 @@ export default function App() {
                   Susceptible, Exposed, Infected and Recovered, and works out how fast people move
                   between those four groups. It assumes everyone mixes with everyone evenly, that{' '}
                   <Term id="r0">R₀</Term> never changes, and that nobody does anything to stop the
-                  spread — none of which is true of a real outbreak. We turn the model's score into
+                  spread — none of which is true of a real outbreak. We turn the binding score into
                   an R₀ between 0.8 and 4.0 by a fixed rule you can check.{' '}
                   <b>This is a what-if, not a forecast.</b>
-                  {panelMode && (
-                    <> {' '}For a protein from another virus, SEIR — built for a respiratory
-                    epidemic — is a generic illustration shown only for comparison.</>
-                  )}
                 </p>
               </div>
 
@@ -1595,13 +1413,7 @@ export default function App() {
                   </section>
                 </>
               ) : (
-                <div className="muted">
-                  {waking ? `Waking the server (~${wakeSeconds}s)…` : 'Score a mutation to run the scenario.'}
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('genomics')}>Score a SARS-CoV-2 variant</button>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveTab('panel')}>Score a cross-virus variant</button>
-                  </div>
-                </div>
+                <p className="muted">Score a mutation to run the scenario.</p>
               )}
             </section>
           )}
@@ -1779,35 +1591,17 @@ export default function App() {
               </div>
             </section>
           )}
-
-          {/* ================================= 6. EXPERIMENTS / BACKTESTING */}
-          {activeTab === 'experiments' && (
-            <>
-              <Experiments metrics={metrics} />
-              <div style={{ marginTop: '2rem', borderTop: `1px solid ${C.rule}`, paddingTop: '2rem' }}>
-                <ArchitectureDiagram palette={C} />
-              </div>
-            </>
-          )}
-
-          {/* ================================= 7. NEW TABS */}
-          {activeTab === 'chemical' && <ChemicalEvaluation palette={C} data={chemicalData} />}
-          {activeTab === 'fewshot' && <FewShotCurve palette={C} data={fewshotData} />}
-          {activeTab === 'hardware' && <HardwareTab palette={C} data={qpuData} />}
-          
         </div>
 
         <footer className="print-hidden" style={{ borderTop: `1px solid ${C.rule}` }}>
           <div className="shell" style={{ padding: '1.5rem var(--gut) 3rem' }}>
             <p className="small" style={{ maxWidth: '72ch' }}>
-              BioQubit Labs · Q-Hack India 2026, Quantum Biotech &amp; Chemistry. Two trained quantum
-              models: a SARS-CoV-2 specialist trained on{' '}
+              BioQubit Labs · Q-Hack India 2026, Quantum Biotech &amp; Chemistry. Trained on{' '}
               <Term id="starr">Starr et al. (2020)</Term>, a{' '}
               <Term id="dms">deep mutational scanning</Term> study of the part of the SARS-CoV-2
-              spike that touches human cells (distances measured from <Term id="pdb">PDB</Term> entry
-              6M0J), and a cross-virus generalist trained on 17 viral proteins across 12 organisms
-              from the ProteinGym benchmark. A research prototype, not a clinical or public-health
-              tool.
+              spike that touches human cells; distances measured from{' '}
+              <Term id="pdb">PDB</Term> entry 6M0J. A research prototype, not a clinical or
+              public-health tool.
             </p>
             <Glossary />
           </div>
@@ -1862,6 +1656,10 @@ export default function App() {
 /* ------------------------------------------------------------------ *
  *  PanelScorer — the multi-virus generalist (weights_panel.npz).
  *  Self-contained: owns its state and talks to /panel
+
+/* ------------------------------------------------------------------ *
+ *  Lightweight inline-SVG line chart. No dependencies.
+ *  series: [{ pts:[{x,y}], color, label, dashed? }]
  * ------------------------------------------------------------------ */
 function MiniLine({ series, width = 460, height = 150, xLabel, yLabel, fmtY }) {
   const all = series.flatMap(s => s.pts);
@@ -1891,124 +1689,21 @@ function MiniLine({ series, width = 460, height = 150, xLabel, yLabel, fmtY }) {
 }
 
 /* ------------------------------------------------------------------ *
- *  StructureViewer — the cross-virus protein's 3D fold, rendered with
- *  3Dmol.js from the ProteinGym AlphaFold2 structure this app serves
- *  (public/structures/, staged by stage_structures.py). These are the
- *  exact folds the burial feature is computed from, so residue numbering
- *  matches and the mutated position is highlighted. Loading the file
- *  same-origin sidesteps the cross-origin limits AlphaFold DB imposes.
- * ------------------------------------------------------------------ */
-let _threeDmol = null;
-function ensure3Dmol() {
-  if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
-  if (window.$3Dmol) return Promise.resolve(window.$3Dmol);
-  if (_threeDmol) return _threeDmol;
-  _threeDmol = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://3dmol.org/build/3Dmol-min.js';
-    s.async = true;
-    s.onload = () => resolve(window.$3Dmol);
-    s.onerror = () => reject(new Error('3Dmol failed to load'));
-    document.head.appendChild(s);
-  });
-  return _threeDmol;
-}
-
-function StructureViewer({ dmsId, site, virus }) {
-  const [manifest, setManifest] = React.useState(null);   // null while loading
-  const [state, setState] = React.useState('idle');        // idle|loading|ready|error
-  const holder = React.useRef(null);
-
-  React.useEffect(() => {
-    let live = true;
-    fetch('/structures/manifest.json')
-      .then(r => (r.ok ? r.json() : {}))
-      .then(m => { if (live) setManifest(m || {}); })
-      .catch(() => { if (live) setManifest({}); });
-    return () => { live = false; };
-  }, []);
-
-  const file = manifest ? manifest[dmsId] : undefined;
-
-  React.useEffect(() => {
-    if (!file || !holder.current) return;
-    let live = true;
-    let viewer = null;
-    setState('loading');
-    const fmt = /\.(cif|mmcif)$/i.test(file) ? 'mmcif' : 'pdb';
-    ensure3Dmol()
-      .then($3Dmol => fetch(`/structures/${file}`).then(r => {
-        if (!r.ok) throw new Error('structure fetch failed');
-        return r.text();
-      }).then(data => ({ $3Dmol, data })))
-      .then(({ $3Dmol, data }) => {
-        if (!live || !holder.current) return;
-        holder.current.innerHTML = '';
-        viewer = $3Dmol.createViewer(holder.current, { backgroundColor: 'white', backgroundAlpha: 0 });
-        viewer.addModel(data, fmt);
-        viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
-        if (site != null && site !== '') {
-          viewer.addStyle({ resi: Number(site) },
-            { stick: { colorscheme: 'magentaCarbon', radius: 0.35 } });
-          viewer.addStyle({ resi: Number(site) },
-            { sphere: { colorscheme: 'magentaCarbon', scale: 0.3 } });
-        }
-        /* Frame the whole fold with a consistent margin — neither cropped nor
-           tiny. Resize first so the fit uses the real canvas size, then re-fit
-           on the next frame in case the layout had not settled yet. */
-        const fit = () => {
-          if (!live || !viewer) return;
-          viewer.resize();
-          viewer.zoomTo();
-          viewer.zoom(1.4);    // zoomTo fits the bounding SPHERE (looks small); fill the panel
-          viewer.render();
-        };
-        fit();
-        requestAnimationFrame(fit);
-        setTimeout(fit, 150);
-        setState('ready');
-      })
-      .catch(() => { if (live) setState('error'); });
-    return () => {
-      live = false;
-      try { if (viewer) viewer.clear(); } catch { /* ignore */ }
-    };
-  }, [file, site]);
-
-  if (manifest === null) {
-    return <p className="small" style={{ opacity: 0.65 }}>Loading structures…</p>;
-  }
-  if (!file) {
-    return (
-      <p className="small" style={{ opacity: 0.65 }}>
-        No 3D structure is staged for this protein yet — run{' '}
-        <span className="mono">stage_structures.py</span> and commit{' '}
-        <span className="mono">public/structures/</span>.
-      </p>
-    );
-  }
-  return (
-    <div className="figure viewer-shell" style={{ padding: 0, overflow: 'hidden' }}>
-      <div ref={holder}
-           style={{ position: 'relative', width: '100%', height: 'clamp(300px, 68vw, 440px)' }} />
-      <div className="figure-cap" style={{ padding: '0.75rem 1rem', marginTop: 0 }}>
-        <b>AlphaFold2 model</b> (ProteinGym) of {virus} — mutated position{' '}
-        <span className="mono">{site}</span> highlighted in magenta. A computational prediction, not
-        an experimentally-solved structure like 6M0J on the SARS-CoV-2 tab; the exact fold the burial
-        feature is measured from.{state === 'error' && ' — the viewer could not load this structure.'}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ *
  *  PanelScorer — the cross-virus generalist (weights_panel.npz).
- *  Pick virus+protein -> site -> residue -> score; the result drives the
- *  main Circuit / Epidemic / Chemistry tabs and shows the protein's fold.
+ *  Pick virus+protein -> site -> residue -> score, then explore the
+ *  same substitution across four views: score, circuit, epidemic
+ *  scenario, and the shared H2 quantum-chemistry benchmark.
  *  Only the 17 structure-verified proteins are offered.
  * ------------------------------------------------------------------ */
 const AA_LIST = 'ACDEFGHIKLMNPQRSTVWY'.split('');
-function PanelScorer({ API, theme, onScore, onJump }) {
+const PANEL_VIEWS = [
+  { id: 'score', label: 'Score' },
+  { id: 'circuit', label: 'The circuit' },
+  { id: 'epidemic', label: 'Epidemic scenario' },
+  { id: 'chem', label: 'Quantum chemistry' },
+];
+
+function PanelScorer({ API }) {
   const [viruses, setViruses] = React.useState(null);
   const [assay, setAssay] = React.useState('');
   const [sites, setSites] = React.useState([]);
@@ -2017,6 +1712,11 @@ function PanelScorer({ API, theme, onScore, onJump }) {
   const [result, setResult] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
+  const [view, setView] = React.useState('score');
+  const [seir, setSeir] = React.useState(null);
+  const [seirBusy, setSeirBusy] = React.useState(false);
+  const [vqe, setVqe] = React.useState(null);
+  const [vqeBusy, setVqeBusy] = React.useState(false);
 
   React.useEffect(() => {
     let live = true;
@@ -2028,7 +1728,7 @@ function PanelScorer({ API, theme, onScore, onJump }) {
   }, [API]);
 
   React.useEffect(() => {
-    setSites([]); setSite(''); setMutant(''); setResult(null);
+    setSites([]); setSite(''); setMutant(''); setResult(null); setSeir(null); setView('score');
     if (!assay) return;
     let live = true;
     fetch(`${API}/panel/sites?protein=${encodeURIComponent(assay)}`)
@@ -2041,23 +1741,29 @@ function PanelScorer({ API, theme, onScore, onJump }) {
   // R0 is a SCENARIO parameter mapped from the score, never a prediction.
   const scenarioR0 = result ? 0.8 + result.score * 3.2 : null;
 
-  // The six descriptors this mutation is reduced to, normalised 0–100 for the
-  // radar — the same features the cross-virus circuit reads.
-  const pf = result && result.features;
-  const panelFeatureData = pf ? [
-    { subject: 'Swap oddness', A: Math.max(0, Math.min(100, ((pf.blosum62 + 4) / 15) * 100)) },
-    { subject: 'Original size', A: Math.max(0, Math.min(100, ((pf.wt_volume - 60) / 168) * 100)) },
-    { subject: 'Size change', A: Math.max(0, Math.min(100, ((pf.delta_volume + 170) / 340) * 100)) },
-    { subject: 'Water-liking', A: Math.max(0, Math.min(100, ((pf.wt_hydropathy + 4.5) / 9) * 100)) },
-    { subject: 'Δ water-liking', A: Math.max(0, Math.min(100, ((pf.delta_hydropathy + 9) / 18) * 100)) },
-    { subject: 'How buried', A: Math.max(0, Math.min(100, (pf.burial / 40) * 100)) },
-  ] : [];
+  React.useEffect(() => {
+    if (view !== 'epidemic' || !result || seir || seirBusy) return;
+    setSeirBusy(true);
+    fetch(`${API}/seir`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ r0: scenarioR0, days: 180 }),
+    }).then(r => r.ok ? r.json() : Promise.reject(new Error(`seir ${r.status}`)))
+      .then(setSeir).catch(e => setErr(e.message)).finally(() => setSeirBusy(false));
+  }, [view, result, seir, seirBusy, scenarioR0, API]);
+
+  React.useEffect(() => {
+    if (view !== 'chem' || vqe || vqeBusy) return;
+    setVqeBusy(true);
+    fetch(`${API}/vqe/curve`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`vqe ${r.status}`)))
+      .then(setVqe).catch(e => setErr(e.message)).finally(() => setVqeBusy(false));
+  }, [view, vqe, vqeBusy, API]);
 
   const wtAt = (s) => (sites.find(x => String(x.site) === String(s)) || {}).wildtype;
   const wt = wtAt(site);
 
   const score = async () => {
-    setBusy(true); setErr(null); setResult(null);
+    setBusy(true); setErr(null); setResult(null); setSeir(null); setView('score');
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 20000);
     try {
@@ -2067,12 +1773,7 @@ function PanelScorer({ API, theme, onScore, onJump }) {
         signal: ctrl.signal,
       });
       if (!r.ok) throw new Error((await r.json()).detail || `Error ${r.status}`);
-      const d = await r.json();
-      setResult(d);
-      /* Lift the score into the shared state the main Circuit / Epidemic /
-         Chemistry tabs read, so this substitution drives those sections
-         instead of a second copy nested inside this panel. */
-      onScore?.(d);
+      setResult(await r.json());
     } catch (e) {
       setErr(e.name === 'AbortError' ? 'Request timed out (20s).' : e.message);
     } finally { clearTimeout(timer); setBusy(false); }
@@ -2088,8 +1789,8 @@ function PanelScorer({ API, theme, onScore, onJump }) {
           One quantum model trained across 17 viral proteins from 12 organisms — influenza, HIV-1,
           dengue, coxsackievirus and more — in the ProteinGym deep-mutational-scanning benchmark. It
           is held out <b>by protein</b>, so each score is the model generalising to a virus it never
-          saw in training. Pick a protein, a site, and a new amino acid, then score it — the result
-          drives the Circuit, Epidemic scenario and Quantum chemistry tabs above.
+          saw in training. Pick a protein, a site, and a new amino acid; then explore the circuit, an
+          illustrative epidemic scenario, and the shared quantum-chemistry benchmark.
         </p>
       </div>
 
@@ -2116,7 +1817,7 @@ function PanelScorer({ API, theme, onScore, onJump }) {
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             <label className="small" style={{ flex: '1 1 200px' }}>
               <div><b>Site</b> (wildtype shown)</div>
-              <select value={site} onChange={e => { setSite(e.target.value); setMutant(''); setResult(null); }}
+              <select value={site} onChange={e => { setSite(e.target.value); setMutant(''); setResult(null); setSeir(null); }}
                       disabled={!sites.length}
                       style={{ width: '100%', padding: '0.5rem', marginTop: '0.3rem' }}>
                 <option value="">— select —</option>
@@ -2125,7 +1826,7 @@ function PanelScorer({ API, theme, onScore, onJump }) {
             </label>
             <label className="small" style={{ flex: '1 1 200px' }}>
               <div><b>New residue</b></div>
-              <select value={mutant} onChange={e => { setMutant(e.target.value); setResult(null); }}
+              <select value={mutant} onChange={e => { setMutant(e.target.value); setResult(null); setSeir(null); }}
                       disabled={!site}
                       style={{ width: '100%', padding: '0.5rem', marginTop: '0.3rem' }}>
                 <option value="">— select —</option>
@@ -2143,386 +1844,105 @@ function PanelScorer({ API, theme, onScore, onJump }) {
       )}
 
       {result && (
-        <div className="sheet" style={{ marginTop: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
-            <b className="mono" style={{ fontSize: 'var(--t-lg)' }}>{result.virus} · {result.mutation}</b>
-            <span className="mono" style={{ fontSize: 'var(--t-xl)' }}>{result.score.toFixed(3)}</span>
+        <div style={{ marginTop: '1.5rem' }}>
+          <div className="rail" role="tablist" style={{ marginBottom: '1rem' }}>
+            {PANEL_VIEWS.map(v => (
+              <button key={v.id} role="tab" aria-selected={view === v.id}
+                      onClick={() => setView(v.id)}>{v.label}</button>
+            ))}
           </div>
-          <p className="small" style={{ marginTop: '0.4rem' }}>
-            {result.interpretation}. Higher means the substitution is more likely to keep the
-            protein functional, so it is the kind of change worth characterising first. Residue
-            burial (contacts within 10 Å of the mutated site): <b>{result.burial_cn10}</b>.
-          </p>
 
-          {panelFeatureData.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <h4 style={{ margin: '0 0 0.3rem' }}>What the model looks at</h4>
-              <p className="small" style={{ opacity: 0.8, margin: 0 }}>
-                The six descriptors this mutation is boiled down to — dense-encoded two per qubit,
-                the same numbers the cross-virus circuit reads.
+          {view === 'score' && (
+            <div className="sheet">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+                <b className="mono" style={{ fontSize: 'var(--t-lg)' }}>{result.virus} · {result.mutation}</b>
+                <span className="mono" style={{ fontSize: 'var(--t-xl)' }}>{result.score.toFixed(3)}</span>
+              </div>
+              <p className="small" style={{ marginTop: '0.4rem' }}>
+                {result.interpretation}. Higher means the substitution is more likely to keep the
+                protein functional, so it is the kind of change worth characterising first. Residue
+                burial (contacts within 10 Å of the mutated site): <b>{result.burial_cn10}</b>.
               </p>
-              <div style={{ width: '100%', height: 'clamp(230px, 56vw, 300px)', minWidth: 0 }}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                  <RadarChart cx="50%" cy="50%" outerRadius="68%" data={panelFeatureData}>
-                    <PolarGrid stroke="rgba(127,127,127,0.25)" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: 'currentColor', fontSize: 10, opacity: 0.85 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                    <Radar dataKey="A" stroke="var(--assay)" fill="var(--assay)" fillOpacity={0.22} />
-                  </RadarChart>
-                </ResponsiveContainer>
+              <p className="small" style={{ opacity: 0.7 }}>
+                Scored on {result.n_qubits} qubits, {result.n_parameters} parameters — the cross-virus
+                generalist, distinct from the SARS-CoV-2 model on the other tabs.
+              </p>
+            </div>
+          )}
+
+          {view === 'circuit' && (
+            <div className="sheet">
+              <p className="small">
+                The measured quantum state of the {result.n_qubits}-qubit circuit for this
+                substitution — the real |ψ|² the readout consumes, across {result.state_distribution.length}{' '}
+                <Term id="basisstate">basis outcomes</Term>. Six residue features are encoded two per
+                qubit (dense encoding), re-uploaded before each of six entangling layers.
+              </p>
+              <div style={{ marginTop: '0.8rem' }}>
+                {result.state_distribution.map(b => (
+                  <div key={b.state} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.2rem 0' }}>
+                    <span className="mono small" style={{ width: '5ch' }}>{b.state}</span>
+                    <div style={{ flex: 1, background: 'rgba(127,127,127,0.15)', borderRadius: 4 }}>
+                      <div style={{ width: `${b.probability}%`, minWidth: 2, height: 14, background: 'var(--assay)', borderRadius: 4 }} />
+                    </div>
+                    <span className="mono small" style={{ width: '6ch', textAlign: 'right' }}>{b.probability}%</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          <p className="small" style={{ opacity: 0.75 }}>
-            Scored on {result.n_qubits} qubits, {result.n_parameters} parameters — the cross-virus
-            generalist, distinct from the SARS-CoV-2 model. This substitution now drives the sections
-            above: <b>The circuit</b> shows its {result.state_distribution.length}-outcome quantum
-            state, <b>Epidemic scenario</b> an illustrative R₀ ≈ {scenarioR0.toFixed(2)} run, and{' '}
-            <b>Quantum chemistry</b> the shared H₂ benchmark.
-          </p>
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.9rem' }}>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => document.getElementById('panel-structure')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-              The 3D structure ↓
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onJump?.('vqc')}>
-              See the circuit →
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onJump?.('seir')}>
-              Epidemic scenario →
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onJump?.('vqe')}>
-              Quantum chemistry →
-            </button>
-          </div>
+          {view === 'epidemic' && (
+            <div className="sheet">
+              <p className="small">
+                An <b>illustrative</b> SEIR scenario, not a forecast. The score is mapped to a scenario
+                R₀ of <b>{scenarioR0.toFixed(2)}</b> (0.8–4.0) and integrated under textbook
+                assumptions. SEIR fits a respiratory epidemic; for a protein from another virus this is
+                a generic what-if, shown for comparison only.
+              </p>
+              {seirBusy && <p className="small">Running the scenario…</p>}
+              {seir && (
+                <>
+                  <MiniLine
+                    series={[{ pts: seir.curve.map(p => ({ x: p.day, y: p.infected })), color: 'var(--assay)' }]}
+                    xLabel="days" yLabel="infected"
+                    fmtY={v => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v)}`} />
+                  <div className="small" style={{ marginTop: '0.5rem' }}>
+                    Peak day <b>{seir.indicators.peak_day}</b> · attack rate{' '}
+                    <b>{seir.indicators.attack_rate_percent}%</b> · R₀ scenario {scenarioR0.toFixed(2)}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
-          <div id="panel-structure" style={{ marginTop: '1.25rem', scrollMarginTop: 'calc(var(--header-h, 0px) + 16px)' }}>
-            <h4 style={{ margin: '0 0 0.5rem' }}>Structure</h4>
-            <StructureViewer dmsId={result.protein} site={result.site}
-                             virus={result.virus} theme={theme} />
-          </div>
+          {view === 'chem' && (
+            <div className="sheet">
+              <p className="small">
+                The <b>shared</b> quantum-chemistry benchmark: a real VQE on the H₂ molecule, checked
+                against exact diagonalization at every bond length. H₂ is the same regardless of virus,
+                so this validates the quantum stack rather than describing this substitution — it is the
+                honest rung of what runs exactly on today's hardware.
+              </p>
+              {vqeBusy && <p className="small">Loading the dissociation curve…</p>}
+              {vqe && vqe.points && (
+                <>
+                  <MiniLine
+                    series={[
+                      { pts: vqe.points.map(p => ({ x: p.bond_length, y: p.exact_energy })), color: 'var(--ink)', dashed: true },
+                      { pts: vqe.points.map(p => ({ x: p.bond_length, y: p.vqe_energy })), color: 'var(--assay)' },
+                    ]}
+                    xLabel="bond length (Å)" yLabel="energy (Ha)" />
+                  <div className="small" style={{ marginTop: '0.5rem' }}>
+                    Solid = VQE, dashed = exact. Equilibrium at{' '}
+                    <b>{vqe.equilibrium_bond_length} Å</b> (experiment 0.7414 Å).
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- *  Experiments — the full measured record: backtesting, baselines,
- *  ablations and null results. Every figure was produced by
- *  train_vqc.py on real deep-mutational-scanning data; headline numbers
- *  are 3-seed restart spreads. These are the committed results
- *  (RESULTS.md); the SARS-CoV-2 headline matches the model card.
- * ------------------------------------------------------------------ */
-const EXP_BORDER = '1px solid rgba(127,127,127,0.25)';
-function ExpTable({ cols, rows, highlight }) {
-  return (
-    <div style={{ overflowX: 'auto', marginTop: '0.8rem' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--t-sm)' }}>
-        <thead>
-          <tr>
-            {cols.map((c, i) => (
-              <th key={i} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '0.4rem 0.7rem',
-                                   borderBottom: '2px solid rgba(127,127,127,0.4)', whiteSpace: 'nowrap' }}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, ri) => (
-            <tr key={ri} style={r[0] === highlight ? { background: 'rgba(127,127,127,0.10)' } : undefined}>
-              {r.map((cell, ci) => (
-                <td key={ci} className={ci === 0 ? '' : 'mono'}
-                    style={{ textAlign: ci === 0 ? 'left' : 'right', padding: '0.35rem 0.7rem',
-                             borderBottom: EXP_BORDER, whiteSpace: 'nowrap',
-                             fontWeight: r[0] === highlight ? 600 : 400 }}>{cell}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function Experiments({ metrics }) {
-  const sAuc = metrics?.vqc?.roc_auc ? metrics.vqc.roc_auc.toFixed(4) : '0.7423';
-  const sAcc = typeof metrics?.vqc?.accuracy === 'number'
-    ? `${(metrics.vqc.accuracy * 100).toFixed(1)}%` : '69.0%';
-
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Experiments &amp; backtesting</h2>
-        <p className="lede">
-          Every design decision in this project was made by measurement, not intuition — and several
-          overturned our first guess. This is the full record: the two models, their classical
-          baselines on identical features, the ablations that chose the features and the circuit, and
-          the things we expected to help that measured as doing nothing. Every number comes from{' '}
-          <span className="mono">train_vqc.py</span> on real deep-mutational-scanning data; headline
-          figures are the <b>mean ± standard deviation across 3 random restarts</b>, never a single
-          lucky seed. Nothing here is estimated.
-        </p>
-      </div>
-
-      <nav style={{ position: 'sticky', top: 'var(--header-h, 0px)', zIndex: 5,
-                    display: 'flex', gap: '0.5rem', flexWrap: 'wrap', padding: '0.6rem 0',
-                    marginBottom: '0.5rem', borderBottom: '1px solid rgba(127,127,127,0.2)',
-                    background: 'rgba(128,128,128,0.08)', backdropFilter: 'blur(10px)',
-                    WebkitBackdropFilter: 'blur(10px)' }}>
-        {[['exp-models', 'Models'], ['exp-baselines', 'Baselines'],
-          ['exp-round2', 'Round 2'], ['exp-round1', 'Round 1']].map(([id, label]) => (
-          <button key={id} type="button" className="btn btn-ghost btn-sm"
-                  onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      {/* ---- the two models ---- */}
-      <section className="section" id="exp-models" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 64px)' }}>
-        <h3>The two shipped models</h3>
-        <p className="section-lede">
-          They answer different questions on different data, so their scores are not comparable: the
-          specialist is tested on held-out <i>sites</i> of one protein, the generalist on held-out{' '}
-          <i>proteins</i> it never saw.
-        </p>
-        <ExpTable
-          cols={['', 'SARS-CoV-2 specialist', 'Cross-virus generalist']}
-          rows={[
-            ['Data', 'Starr 2020 RBD DMS', 'ProteinGym · 17 proteins'],
-            ['Rows (train / test)', '2,856 / 946', '111,859 / 34,302'],
-            ['Split', 'grouped by site', 'grouped by protein'],
-            ['Circuit', '2 qubits · 6 layers · 41 p', '3 qubits · 6 layers · 63 p'],
-            ['Held-out AUC', `${sAuc} ± 0.0016`, '0.6812 ± 0.0022'],
-            ['Accuracy', sAcc, '63.4%'],
-            ['10-restart ensemble AUC *', '0.757', '0.690'],
-          ]}
-        />
-        <p className="small" style={{ marginTop: '0.6rem', opacity: 0.85 }}>
-          * The live-served models are the single 41- and 63-parameter circuits (the rows above).
-          Averaging ten restarts gives a stronger, reproducible model — on the cross-virus task it{' '}
-          <b>beats every classical baseline</b> (0.690 vs the best classical 0.684) — reported here,
-          not served, so the live demo always matches its own card.
-        </p>
-      </section>
-
-      {/* ---- Model 1 baselines ---- */}
-      <section className="section" id="exp-baselines" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 64px)' }}>
-        <h3>Model 1 — SARS-CoV-2, versus classical baselines</h3>
-        <p className="section-lede">
-          Same four features, same site-grouped split, same 946 held-out mutations. We report the gap
-          to the classical methods rather than hiding it.
-        </p>
-        <ExpTable
-          cols={['Method', 'AUC', 'Accuracy', 'prec@100']}
-          rows={[
-            ['Logistic regression', '0.7796', '73.0%', '1.00'],
-            ['Neural network (MLP)', '0.7706', '72.8%', '1.00'],
-            ['Support vector machine', '0.7576', '69.3%', '0.97'],
-            ['VQC — 10-restart ensemble', '0.7573', '69.5%', '1.00'],
-            ['VQC — shipped (41 params)', '0.7423', sAcc, '0.99'],
-            ['Chance (majority class)', '0.5000', '68.4%', '0.78'],
-          ]}
-          highlight="VQC — shipped (41 params)"
-        />
-        <p className="note" style={{ marginTop: '1rem' }}>
-          <b>Read AUC, not accuracy.</b> The data is 68% positive, so every method — ours included —
-          lands near 69–73% accuracy by mostly answering "yes"; chance alone scores 68.4%. The honest
-          claim is the cost, not the rank: the VQC matches our Round-1 accuracy (0.7468, 4 qubits, 74
-          parameters) on <b>2 qubits and 41 parameters</b>, and on top-of-list precision it is level
-          with logistic regression. A 10-restart ensemble lifts AUC to <b>0.757</b> — level with the
-          SVM — but logistic regression stays ahead: here logistic {'>'} MLP {'>'} SVM, so the task is
-          near-linear and a quantum feature map has little nonlinearity to add. That is the honest
-          reason quantum doesn't win here, and why it <i>does</i> on the harder cross-virus task.
-        </p>
-      </section>
-
-      {/* ---- Model 2 baselines ---- */}
-      <section className="section">
-        <h3>Model 2 — cross-virus, protein-held-out</h3>
-        <p className="section-lede">
-          No protein appears in both halves, so each score measures generalisation to a virus the
-          model has never seen. The shipped <b>63-parameter</b> circuit <b>beats logistic regression</b> and
-          is level with SVM and the MLP — at half the MLP's 129 parameters. Averaging ten restarts
-          (an honest single model — every restart used, none picked by its test score) <b>beats every
-          classical baseline outright</b>, 0.6903.
-        </p>
-        <ExpTable
-          cols={['Method', 'AUC (protein-held-out)']}
-          rows={[
-            ['VQC ensemble (10 restarts)', '0.6903'],
-            ['Neural network (MLP)', '0.6840'],
-            ['Support vector machine', '0.6833'],
-            ['VQC — shipped (63 params)', '0.6812 ± 0.0022'],
-            ['Logistic regression', '0.6760'],
-          ]}
-          highlight="VQC — shipped (63 params)"
-        />
-        <p className="section-lede" style={{ marginTop: '0.8rem' }}>
-          Per held-out protein (VQC): influenza/Wu-2014 <span className="mono">0.705</span>,
-          influenza/Soh-2019 <span className="mono">0.703</span>, influenza-PA/Wu-2015{' '}
-          <span className="mono">0.685</span>, coxsackievirus-B3 <span className="mono">0.667</span>{' '}
-          — mean <span className="mono">0.690</span>.
-        </p>
-      </section>
-
-      {/* ---- Round 2 experiments ---- */}
-      <section className="section" id="exp-round2" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 64px)' }}>
-        <h3>Round 2 experiments</h3>
-
-        <div className="sheet" style={{ marginBottom: '1rem' }}>
-          <h4 style={{ margin: 0 }}>Burial: a structural feature that generalises across viruses</h4>
-          <p className="small" style={{ marginTop: '0.4rem' }}>
-            Model 1's strongest feature, ACE2 distance, is measured from one complex and is
-            meaningless elsewhere. Its protein-agnostic cousin is residue <b>burial</b> — contacts
-            within 10 Å in the protein's own AlphaFold fold. Added to the cross-virus model, same
-            split and architecture:
-          </p>
-          <ExpTable
-            cols={['Cross-virus model', 'Held-out AUC']}
-            rows={[
-              ['5 features (no burial)', '0.6547 ± 0.0016'],
-              ['6 features (+ burial)', '0.6812 ± 0.0022'],
-            ]}
-            highlight="6 features (+ burial)"
-          />
-          <p className="small" style={{ marginTop: '0.6rem' }}>
-            <b>+0.0265 AUC</b>, restart ranges disjoint, all four held-out proteins improved, training
-            loss down 0.636 → 0.611. The structure→assay join was verified residue-by-residue; two
-            proteins whose AlphaFold numbering disagreed with the DMS positions were detected and
-            dropped automatically.
-          </p>
-        </div>
-
-        <div className="sheet" style={{ marginBottom: '1rem' }}>
-          <h4 style={{ margin: 0 }}>The optimal feature count scales with the dataset</h4>
-          <p className="small" style={{ marginTop: '0.4rem' }}>
-            On the small SARS-CoV-2 set, adding two descriptors <b>overfits</b> — AUC drops while
-            training loss improves, the textbook signature. On the 112k-row panel the same two
-            descriptors help. Feature sets do not transfer across dataset sizes.
-          </p>
-          <ExpTable
-            cols={['Model', '4 feat', '6 feat']}
-            rows={[
-              ['SARS-CoV-2 (2,856 rows)', '0.7423', '0.6785'],
-              ['Cross-virus (112k rows) *', '0.6547', '0.6812'],
-            ]}
-          />
-          <p className="small" style={{ marginTop: '0.5rem', opacity: 0.7 }}>
-            * cross-virus columns are 5 vs 6 features (burial is the 6th).
-          </p>
-        </div>
-
-        <div className="sheet" style={{ marginBottom: '1rem' }}>
-          <h4 style={{ margin: 0 }}>Dense encoding, and why variance needs multiple seeds</h4>
-          <p className="small" style={{ marginTop: '0.4rem' }}>
-            Angle encoding puts one feature per qubit, and our Round-1 ablation measured that eight
-            qubits hit a <Term id="barren">barren plateau</Term> (0.558 AUC). <b>Dense encoding</b>{' '}
-            places two features per qubit, so six descriptors ride on three qubits — verified live by
-            state-vector simulation, with the Y-before-Z ordering load-bearing. Restart-to-restart
-            spread shrinks sharply with data, which is why every headline is a 3-seed spread:
-          </p>
-          <ExpTable
-            cols={['Dataset', 'rows', 'seed sd']}
-            rows={[
-              ['SARS-CoV-2', '2,856', '±0.020'],
-              ['Cross-virus panel', '111,859', '±0.002'],
-            ]}
-          />
-        </div>
-
-        <div className="sheet" style={{ marginBottom: '1rem' }}>
-          <h4 style={{ margin: 0 }}>Measured null results</h4>
-          <p className="small" style={{ marginTop: '0.4rem' }}>
-            Three things we expected to help and measured as doing nothing — reported because a null
-            is a result:
-          </p>
-          <ul className="small" style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
-            <li><b>BLOSUM62 clamp recalibration:</b> panel AUC 0.6812 (−4,11) vs 0.6796 (−4,3) — overlapping.</li>
-            <li><b>One model per genetic background vs one pooled model:</b> 0.7644 vs 0.7651, a dead heat (specialists won 4 of 8).</li>
-            <li><b>Expanding the database 38×:</b> a SARS background panel added 41k rows but 90% were feature-vector duplicates — distinct vectors 3,802 → ~4,200. More <i>proteins</i> is what added signal: 3,802 → 105,894 distinct vectors.</li>
-          </ul>
-        </div>
-
-        <div className="sheet">
-          <h4 style={{ margin: 0 }}>The lookup-oracle ceiling, and the honest gap</h4>
-          <p className="small" style={{ marginTop: '0.4rem' }}>
-            Looking up how the same substitution behaved in a <i>related</i> genetic background scores{' '}
-            <b>0.9814 AUC</b> (leave-one-genotype-out) — but that is a lookup table, not a model, and
-            it needs measurements a novel pathogen does not have. Our site- and protein-grouped splits
-            forbid that lookup by construction, which is exactly why the honest numbers are 0.74 and
-            0.68 rather than the ~0.95 a random split would report. A 10,000-sample paired bootstrap on
-            the 946 SARS-CoV-2 rows puts each model's 95% interval ~0.06 wide, so on one test set the
-            methods sit within sampling noise of each other.
-          </p>
-        </div>
-
-        <div className="sheet" style={{ marginTop: '1rem' }}>
-          <h4 style={{ margin: 0 }}>Pushing the model further — three more measured nulls</h4>
-          <p className="small" style={{ marginTop: '0.4rem' }}>
-            With burial already capturing the structural signal, we tried three more ways to move the
-            number — two screened with a fast leave-one-protein-out <b>classical pre-filter</b> (logistic
-            regression and an MLP on the held-out-virus split), one a direct <b>3-seed VQC A/B</b> — and
-            all three came back null:
-          </p>
-          <ul className="small" style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
-            <li><b>AlphaFold pLDDT</b> as a 7th feature: MLP held-out AUC 0.7169 → 0.7132 (<b>−0.005</b>). Redundant with burial — confident regions are buried regions.</li>
-            <li><b>Per-protein row balancing</b> (cap each virus's training rows): 0.7169 → 0.7179 (<b>+0.001</b>). The panel is already near-balanced (median 10.7k rows/protein, max 16.9k), so there was little to fix.</li>
-            <li><b>Deeper circuit</b> (8 layers vs the shipped 6), a 3-seed VQC A/B: pooled test AUC 0.6794 ± 0.0038 → 0.6799 ± 0.0019 (<b>+0.0005</b>), overlapping, with the validation-pick seed identical at 0.6820. Lower training loss, no held-out gain — saturation, not signal.</li>
-          </ul>
-          <p className="small" style={{ marginTop: '0.5rem', opacity: 0.8 }}>
-            Four independent measurements — pLDDT, balancing, the BLOSUM clamp above, and circuit depth —
-            now say the same thing: the physicochemical/structural feature space, and the circuit
-            expressivity reading it, are saturated. Burial was the signal, and more of the same adds
-            nothing. Reported because a cheap, decisive null is still a result.
-          </p>
-        </div>
-      </section>
-
-      {/* ---- Round 1 ablations ---- */}
-      <section className="section" id="exp-round1" style={{ scrollMarginTop: 'calc(var(--header-h, 0px) + 64px)' }}>
-        <h3>Round 1 ablations (what chose the design)</h3>
-        <p className="section-lede">Still valid; the shipped circuit has since moved to a dense encoding, but the feature conclusions carry over.</p>
-
-        <div className="sheet" style={{ marginBottom: '1rem' }}>
-          <h4 style={{ margin: 0 }}>Structure beats more chemistry</h4>
-          <p className="small" style={{ marginTop: '0.4rem' }}>
-            Minimum heavy-atom distance from each RBD residue to ACE2 (PDB 6M0J; &lt;4.5 Å reproduces
-            all 17 literature contact residues) was the single strongest feature. Adding more chemical
-            descriptors instead <i>hurt</i>.
-          </p>
-          <ExpTable
-            cols={['Feature set (MLP, same split)', 'AUC']}
-            rows={[
-              ['4 features with relative_position', '0.7573'],
-              ['4 features with ace2_distance', '0.7772'],
-              ['5 features (both)', '0.7329'],
-            ]}
-            highlight="4 features with ace2_distance"
-          />
-          <p className="small" style={{ marginTop: '0.5rem' }}>
-            Effect on the VQC: <b>+0.065</b>, the largest single gain in the project, from one number
-            per site at zero runtime cost.
-          </p>
-        </div>
-
-        <div className="sheet">
-          <h4 style={{ margin: 0 }}>Three more findings</h4>
-          <ul className="small" style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
-            <li><b>Depth and width are not independent.</b> 6 layers helped at 4 qubits but collapsed at 8 (0.558, loss never below 0.556) — a barren-plateau signature, and the evidence for keeping the circuit narrow.</li>
-            <li><b>The failure worth presenting.</b> The first run plateaued at exactly the entropy of the class prior: whole-sequence-average features shifted by &lt;0.05 rad per mutation. Switching to substitution-level descriptors fixed it.</li>
-            <li><b>24× training speedup.</b> Broadcasting the batch through PennyLane in one call vs a per-sample loop: 21.96 s → 0.91 s for 3 optimiser steps at 8 qubits, identical mathematics.</li>
-            <li><b>Live-surveillance findings.</b> Exact-length matching rejected 100% of NCBI records (fixed with Smith–Waterman alignment); deposits arrive in batches (40 records → ~11–14 distinct RBD sets); a shared Omicron background tied naive ranking, fixed by ranking on each deposit's distinguishing mutations.</li>
-          </ul>
-        </div>
-      </section>
-
-      <p className="note is-flag" style={{ marginTop: '1.5rem' }}>
-        <b>What we do not claim.</b> No quantum advantage, no outbreak prediction, and no accuracy
-        figure as evidence of quality on imbalanced data. The two models answer different questions,
-        so their 0.74 and 0.68 are not comparable. Every figure above is reproducible from the scripts
-        in the repository.
-      </p>
     </section>
   );
 }
