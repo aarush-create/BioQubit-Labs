@@ -6,6 +6,16 @@ import {
   AreaChart, Area
 } from 'recharts';
 
+// --- NEW IMPORTS ---
+import ChemicalEvaluation from './components/ChemicalEvaluation';
+import ArchitectureDiagram from './components/ArchitectureDiagram';
+import FewShotCurve from './components/FewShotCurve';
+import HardwareTab from './components/HardwareTab';
+import chemicalData from './data/chemical-evaluation.json';
+import fewshotData from './data/fewshot-results.json';
+import qpuData from './data/qpu-run.json';
+// -------------------
+
 /* Chart colours. Recharts needs literal values, not CSS vars, so the two
    themes are mirrored here from index.css and picked at render time. */
 const PALETTES = {
@@ -379,7 +389,8 @@ export default function App() {
   /* Deep-link the active tab through the URL hash, so a judge can link to a
      specific tab and a refresh does not snap back to the feed. */
   useEffect(() => {
-    const ids = ['sentinel', 'genomics', 'panel', 'vqc', 'seir', 'vqe', 'experiments'];
+    // --- ADDED NEW TABS TO VALIDATION ---
+    const ids = ['sentinel', 'genomics', 'panel', 'vqc', 'seir', 'vqe', 'experiments', 'chemical', 'fewshot', 'hardware'];
     const read = () => {
       const h = window.location.hash.replace('#', '');
       if (ids.includes(h)) setActiveTab(h);
@@ -716,6 +727,10 @@ export default function App() {
     { id: 'seir', label: 'Epidemic scenario' },
     { id: 'vqe', label: 'Quantum chemistry' },
     { id: 'experiments', label: 'Experiments' },
+    // --- NEW TABS ---
+    { id: 'chemical', label: 'Chemical evaluation' },
+    { id: 'fewshot', label: 'Few-shot benchmark' },
+    { id: 'hardware', label: 'IBM hardware' },
   ];
 
   return (
@@ -1015,7 +1030,8 @@ export default function App() {
                             style={{ background: 'none', border: 0, padding: 0, font: 'inherit',
                                      color: 'var(--assay)', textDecoration: 'underline', cursor: 'pointer' }}>
                       Cross-virus model
-                    </button>{' '}tab.
+                    </button>{' '}
+                    tab.
                   </p>
                 </div>
               )}
@@ -1765,7 +1781,20 @@ export default function App() {
           )}
 
           {/* ================================= 6. EXPERIMENTS / BACKTESTING */}
-          {activeTab === 'experiments' && <Experiments metrics={metrics} />}
+          {activeTab === 'experiments' && (
+            <>
+              <Experiments metrics={metrics} />
+              <div style={{ marginTop: '2rem', borderTop: `1px solid ${C.rule}`, paddingTop: '2rem' }}>
+                <ArchitectureDiagram palette={C} />
+              </div>
+            </>
+          )}
+
+          {/* ================================= 7. NEW TABS */}
+          {activeTab === 'chemical' && <ChemicalEvaluation palette={C} data={chemicalData} />}
+          {activeTab === 'fewshot' && <FewShotCurve palette={C} data={fewshotData} />}
+          {activeTab === 'hardware' && <HardwareTab palette={C} data={qpuData} />}
+          
         </div>
 
         <footer className="print-hidden" style={{ borderTop: `1px solid ${C.rule}` }}>
@@ -1833,10 +1862,6 @@ export default function App() {
 /* ------------------------------------------------------------------ *
  *  PanelScorer — the multi-virus generalist (weights_panel.npz).
  *  Self-contained: owns its state and talks to /panel
-
-/* ------------------------------------------------------------------ *
- *  Lightweight inline-SVG line chart. No dependencies.
- *  series: [{ pts:[{x,y}], color, label, dashed? }]
  * ------------------------------------------------------------------ */
 function MiniLine({ series, width = 460, height = 150, xLabel, yLabel, fmtY }) {
   const all = series.flatMap(s => s.pts);
