@@ -12,6 +12,13 @@ Design rules enforced here, in order of how much they matter to the jury:
    they are separate models with separate assumptions.
 """
 
+from routers import chemical_evaluation
+
+app = FastAPI(title="BioQubit Labs API")
+
+# Mount the evaluation endpoint alongside your existing IBM Qiskit integrations
+app.include_router(chemical_evaluation.router, tags=["Validation"])
+
 from __future__ import annotations
 
 import json
