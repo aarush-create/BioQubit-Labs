@@ -29,6 +29,15 @@ in a live Q&A.
   proteins improved**, restart ranges disjoint.
 - Database grew 3,802 → 146,161 rows; 1 → 12 viral organisms; ~28× distinct feature vectors.
 - VQE: max error ~1.9e-7 Ha across the H₂ curve (chemical accuracy = 1.6e-3).
+- Backend: inference runs on **IBM Qiskit Aer** (`QVIRA_BACKEND=qiskit.aer`),
+validated against the analytic default.qubit — residual scales as 1/√N at a
+fitted exponent of **−0.497** (pure shot noise predicts −0.500), no fixture
+above 2σ across 18 tests. See `api/convergence_check.py`.
+- Chemistry panel compares **three** energies at every bond length: classical
+mean-field Hartree–Fock, quantum VQE, exact diagonalisation. Max HF error:
+**0.22 Ha (~139 kcal/mol)** at R=2.4 Å; max VQE error: 1.9e-7 Ha. VQE
+recovers the correlation energy HF misses — a real
+quantum-beats-classical-mean-field result at this scale.
 - Surveillance: ~40 deposits → ~14 distinct variants; read live counts off the panel.
 
 **If you take one framing in: we did not raise the headline AUC — we halved the qubits
@@ -95,12 +104,27 @@ cost you the room.
 > *training* loss but no held-out gain, and its top-of-list triage precision was if
 > anything worse. Depth is saturated at six — that is our fourth measured null.
 
-**"Does this run on real hardware?"** ⭐ *(stronger answer than Round 1)*
-> Not yet, but the circuits are now 2–3 qubits — trivially small for a real
-> backend — so it's our immediate next step, not a distant one. We run on
-> PennyLane `default.qubit` with a `QVIRA_BACKEND` switch for Qiskit, and we
-> report shot noise at 2048 shots so the score carries an error bar. The open
-> question on hardware is readout error and transpilation, not qubit count.
+**"Does this run on IBM Qiskit?"** ⭐ *(the Round 2 answer)*
+> Yes. `GET /` reports `quantum_backend: qiskit.aer`. Inference flows through
+> the PennyLane–Qiskit plugin onto Qiskit Aer, from the same `circuit.py` the
+> models were trained on. We did not re-train — the weights are
+> backend-agnostic, and that was the point of keeping one circuit definition.
+>
+> We validated the swap. Aer is a sampling simulator (no analytic mode), so an
+> exact-equality parity test is the wrong one — the right test is convergence.
+> At 2048 / 8192 / 32768 shots the residual against the analytic default.qubit
+> value shrinks with a fitted scaling exponent of **−0.497** (pure shot noise
+> predicts −0.500), and across 18 fixture-by-shot-level tests no residual
+> exceeded 2σ. Both backends implement the same state. See
+> `api/convergence_check.py` and `api/parity_check.py` — the scripts and the
+> output are committed.
+>
+> At serving shot counts (2048) a single prediction carries ±0.010 of shot
+> noise, which `quantum_engine.py` already reports as an error bar with every
+> score. On real hardware (`qiskit.remote`) the open questions become readout
+> error and transpilation, not qubit count — the circuits are 2–3 qubits, so
+> they fit any backend. We have the code, we have not run it, we do not claim
+> a hardware number.
 
 ---
 
@@ -171,14 +195,33 @@ cost you the room.
 > strongly — SEIR fits a respiratory epidemic, so for an HIV or dengue protein
 > it's a generic what-if, shown for comparison only.
 
-**"The VQE — what did you compute, and why is it on both tabs?"**
-> H₂ in a minimal basis, 4 qubits, scanned across the dissociation curve and
-> benchmarked against exact diagonalisation at every point — max error ~1.9e-7
-> Hartree, four orders inside chemical accuracy. It's the same benchmark on both
-> model tabs because H₂ is H₂ regardless of virus: it validates the quantum stack
-> and marks the honest rung of what runs exactly today. A protein binding pocket
-> is ~10⁵ qubits away; any demo claiming a quantum-computed binding energy is
-> doing something else.
+**"The VQE — what did you compute, and why is it on both tabs?"** ⭐ *(Round 2
+chemistry centrepiece)*
+> H₂ in a minimal basis, 4 qubits, scanned across the dissociation curve. At
+> every bond length we compare **three** energies on the Quantum chemistry
+> tab:
+>
+>   - **Hartree–Fock** — classical mean-field, each electron in the average
+>     field of the others. The initial iterate of our VQE optimisation
+>     (`convergence[0]` in the stored history).
+>   - **VQE (quantum)** — our ansatz, `AllSinglesDoubles` (UCCSD-style),
+>     optimised on top of Hartree–Fock.
+>   - **Exact diagonalisation (FCI)** — ground truth at this basis.
+>
+> Numbers: VQE matches exact to **≤1.9×10⁻⁷ Ha** everywhere — four orders of
+> magnitude inside chemical accuracy (1.6 mHa). Classical Hartree–Fock is
+> close near equilibrium (R≈0.74 Å: 0.02 Ha off) and **fails qualitatively at
+> stretched bonds** — at R=2.4 Å it misses **0.22 Ha ≈ 139 kcal/mol**. The gap
+> between the HF and VQE lines is the correlation energy — what mean-field
+> throws away by averaging the field, and what VQE recovers.
+>
+> That is a real quantum-beats-classical-mean-field result at this scale. We
+> state the honest caveat verbatim: at 4 qubits classical FCI is cheap, so
+> there is **no computational advantage** here. The point of the benchmark is
+> to validate the quantum stack end-to-end and show the correlation-energy
+> story on a system where the exact answer is reachable. A protein binding
+> pocket is ~10⁵ qubits away; any demo claiming a quantum-computed binding
+> energy is doing something else.
 
 **"What if your AI copilot hits its rate limit mid-demo?"**
 > It falls through — Gemini first, Grok second, any failure moves to the next,
@@ -315,7 +358,9 @@ click.
 5. **Results** — both models beside their baselines, 3-seed spreads, chance line
 6. **The burial feature** — +0.027, all 4 proteins, verified join
 7. **What we measured** — feature count scales with data; four null results
-8. VQE — H₂ vs exact diagonalisation + the scaling ladder
+8. VQE — H₂: HF (classical mean-field) vs VQE (quantum) vs exact (FCI);
+   VQE within 1.9e-7 Ha, HF off by 0.22 Ha (~139 kcal/mol) at stretched bond.
+   The scaling ladder underneath.
 9. Limitations and roadmap (hardware run next) ← **do not cut**
 
 ## Two days before
