@@ -2006,9 +2006,9 @@ export default function App() {
                 <h3>Where quantum wins — cross-virus triage (head-to-head, same data)</h3>
                 <p style={{ maxWidth: '100ch' }}>
                   {CROSS_VIRUS_META.task}. All models trained on the same{' '}
-                  <span className="mono">{CROSS_VIRUS_META.train.toLocaleString()}</span> rows,
+                  <span className="mono">{CROSS_VIRUS_META.train.toLocaleString('en-US')}</span> rows,
                   tested on the same{' '}
-                  <span className="mono">{CROSS_VIRUS_META.test.toLocaleString()}</span> rows,
+                  <span className="mono">{CROSS_VIRUS_META.test.toLocaleString('en-US')}</span> rows,
                   identical {CROSS_VIRUS_META.features} features, identical split.{' '}
                   Numbers below are read live from the committed{' '}
                   <code>api/metrics_panel.json</code> (and served at{' '}
@@ -2321,7 +2321,7 @@ export default function App() {
                               <div className="small mono" style={{ color: C.ink3 }}>{row.id}</div>
                             </td>
                             <td className="mono" style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>
-                              {row.n.toLocaleString()}
+                              {row.n.toLocaleString('en-US')}
                             </td>
                             <td className="mono" style={{ padding: '0.5rem 0.75rem', textAlign: 'right',
                               fontWeight: 600, color: C.assay }}>
@@ -2495,7 +2495,7 @@ export default function App() {
                       QUANTUM BEATS CLASSICAL CHEMISTRY
                     </div>
                     <p style={{ margin: '0.5rem 0 0', fontSize: '0.9rem' }}>
-                      Our VQE on H₂ matches exact diagonalisation to <span className="mono">10⁻⁷ Ha</span>
+                      Our VQE on H₂ matches exact diagonalisation to <span className="mono">10⁻⁷ Ha</span>{' '}
                       across the full dissociation curve. Classical Hartree–Fock (mean-field) misses
                       <b> 0.22 Ha ≈ 139 kcal/mol</b> at the stretched bond — the correlation energy
                       electrons feel but mean-field averages away. <b>A real quantum-beats-classical
@@ -2698,7 +2698,7 @@ function MiniLine({ series, width = 460, height = 150, xLabel, yLabel, fmtY }) {
   const padL = 44, padB = 24, padT = 8, padR = 8;
   const sx = x => padL + (xmax === xmin ? 0 : (x - xmin) / (xmax - xmin)) * (width - padL - padR);
   const sy = y => height - padB - (ymax === ymin ? 0 : (y - ymin) / (ymax - ymin)) * (height - padT - padB);
-  const f = fmtY || (v => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2)));
+  const f = fmtY || (v => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('en-US') : v.toFixed(2)));
   return (
     <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto' }} role="img">
       <line x1={padL} y1={height - padB} x2={width - padR} y2={height - padB} stroke="currentColor" opacity="0.25" />
