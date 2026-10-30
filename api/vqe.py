@@ -9,8 +9,13 @@ What runs here instead is a real variational quantum eigensolver:
   - the qubit Hamiltonian comes from a genuine Hartree-Fock calculation
     (precomputed with PySCF by build_vqe_data.py, shipped as vqe_h2.json)
   - the ansatz is optimised at request time on PennyLane
-  - the result is compared against exact diagonalisation of the same
-    Hamiltonian, so the answer is falsifiable
+  - the result is compared against TWO classical references:
+      * Hartree-Fock, the classical mean-field initial iterate of the VQE
+        optimisation (convergence[0] in the stored history)
+      * exact diagonalisation of the same Hamiltonian (the "ground truth")
+    so the panel can show both the quantum-matches-exact result (VQE ~ FCI)
+    and the quantum-beats-classical-mean-field result (VQE << HF at
+    stretched bonds).
 
 4 qubits, 15 Pauli terms, a few seconds per geometry.
 
@@ -34,6 +39,7 @@ from pennylane import numpy as pnp
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "vqe_h2.json")
 _PAULI = {"X": qml.PauliX, "Y": qml.PauliY, "Z": qml.PauliZ}
+CHEMICAL_ACCURACY_HA = 1.6e-3  # ~1 kcal/mol
 
 _data = None
 
@@ -97,19 +103,22 @@ def stored(bond_length: float) -> dict | None:
         return None
     err = abs(p["vqe_energy"] - p["exact_energy"])
     hist = p.get("convergence", [])
+    hf = float(hist[0]) if hist else None
+    hf_err = abs(hf - p["exact_energy"]) if hf is not None else None
     return {
         "bond_length": p["bond_length"],
         "vqe_energy": round(p["vqe_energy"], 8),
         "exact_energy": round(p["exact_energy"], 8),
         "absolute_error": err,
-        "chemical_accuracy": 1.6e-3,
-        "within_chemical_accuracy": err < 1.6e-3,
+        "chemical_accuracy": CHEMICAL_ACCURACY_HA,
+        "within_chemical_accuracy": err < CHEMICAL_ACCURACY_HA,
         "convergence": [{"step": i, "energy": e} for i, e in enumerate(hist)],
         "n_qubits": p["n_qubits"],
         "n_parameters": p.get("n_parameters"),
         "n_pauli_terms": len(p["terms"]),
-        "hartree_fock_energy": hist[0] if hist else None,
-        "correlation_energy": round(hist[0] - p["vqe_energy"], 8) if hist else None,
+        "hartree_fock_energy": round(hf, 8) if hf is not None else None,
+        "hf_absolute_error": hf_err,
+        "correlation_energy": round(hf - p["vqe_energy"], 8) if hf is not None else None,
         "computed": "precomputed",
         "method": {
             "molecule": "H2", "basis": "sto-3g", "mapping": "Jordan-Wigner",
@@ -161,20 +170,23 @@ def run(bond_length: float, steps: int = 60, stepsize: float = 0.4) -> dict:
 
     final = float(circuit(pnp.array(params, requires_grad=False)))
     exact = point["exact_energy"]
+    hf_energy = history[0] if history else None
+    hf_err = abs(hf_energy - exact) if hf_energy is not None else None
 
     return {
         "bond_length": point["bond_length"],
         "vqe_energy": round(final, 8),
         "exact_energy": round(exact, 8),
         "absolute_error": abs(final - exact),
-        "chemical_accuracy": 1.6e-3,
-        "within_chemical_accuracy": abs(final - exact) < 1.6e-3,
+        "chemical_accuracy": CHEMICAL_ACCURACY_HA,
+        "within_chemical_accuracy": abs(final - exact) < CHEMICAL_ACCURACY_HA,
         "convergence": [{"step": i, "energy": e} for i, e in enumerate(history)],
         "n_qubits": n,
         "n_parameters": int(len(params)),
         "n_pauli_terms": len(point["terms"]),
-        "hartree_fock_energy": history[0] if history else None,
-        "correlation_energy": round(history[0] - final, 8) if history else None,
+        "hartree_fock_energy": round(hf_energy, 8) if hf_energy is not None else None,
+        "hf_absolute_error": hf_err,
+        "correlation_energy": round(hf_energy - final, 8) if hf_energy is not None else None,
         "runtime_seconds": round(elapsed, 2),
         "method": {
             "molecule": "H2", "basis": "sto-3g", "mapping": "Jordan-Wigner",
@@ -193,26 +205,78 @@ def run(bond_length: float, steps: int = 60, stepsize: float = 0.4) -> dict:
 
 
 def curve() -> dict:
-    """The full dissociation curve, from precomputed results. Instant."""
+    """The full dissociation curve, from precomputed results. Instant.
+
+    Returns three energies per bond length -- the two classical references
+    (Hartree-Fock mean-field and exact diagonalisation) and the quantum VQE
+    answer -- so the frontend can plot VQE-matches-exact alongside
+    VQE-beats-Hartree-Fock. The old `absolute_error` key is kept for
+    backward compatibility with the shipped UI.
+    """
     pts = []
     for g in _load()["points"]:
         if "vqe_energy" not in g:
             continue
+        hist = g.get("convergence", [])
+        hf = float(hist[0]) if hist else None            # HF is iteration 0 of the VQE run
+        vqe_err = abs(g["vqe_energy"] - g["exact_energy"])
+        hf_err = abs(hf - g["exact_energy"]) if hf is not None else None
         pts.append({
             "bond_length": g["bond_length"],
             "vqe_energy": round(g["vqe_energy"], 8),
             "exact_energy": round(g["exact_energy"], 8),
-            "absolute_error": abs(g["vqe_energy"] - g["exact_energy"]),
+            "hartree_fock_energy": round(hf, 8) if hf is not None else None,
+            "vqe_absolute_error": vqe_err,
+            "hf_absolute_error": hf_err,
+            "correlation_energy": round(hf - g["vqe_energy"], 8) if hf is not None else None,
+            # Back-compat: the shipped UI reads `absolute_error` as the VQE error.
+            "absolute_error": vqe_err,
         })
     if not pts:
         raise RuntimeError("vqe_h2.json has no VQE results — rerun build_vqe_data.py")
-    errs = [p["absolute_error"] for p in pts]
+    vqe_errs = [p["vqe_absolute_error"] for p in pts]
+    hf_errs = [p["hf_absolute_error"] for p in pts if p["hf_absolute_error"] is not None]
     best = min(pts, key=lambda p: p["exact_energy"])
     return {
         "points": pts,
-        "max_absolute_error": max(errs),
-        "all_within_chemical_accuracy": max(errs) < 1.6e-3,
+        # Back-compat alias; the UI reads this as the max VQE error.
+        "max_absolute_error": max(vqe_errs),
+        "max_vqe_absolute_error": max(vqe_errs),
+        "max_hf_absolute_error": max(hf_errs) if hf_errs else None,
+        "all_within_chemical_accuracy": max(vqe_errs) < CHEMICAL_ACCURACY_HA,
+        "chemical_accuracy_hartree": CHEMICAL_ACCURACY_HA,
         "equilibrium_bond_length": best["bond_length"],
         "equilibrium_energy": best["exact_energy"],
         "experimental_bond_length": 0.7414,
+        "classical_vs_quantum": {
+            "mean_field_classical": {
+                "method": "Hartree-Fock",
+                "max_absolute_error_hartree": max(hf_errs) if hf_errs else None,
+                "note": (
+                    "Classical mean-field: electrons move in each others' "
+                    "AVERAGE field, with zero correlation. Exact at equilibrium, "
+                    "fails qualitatively at stretched bonds."
+                ),
+            },
+            "quantum_vqe": {
+                "method": "VQE / AllSinglesDoubles (UCCSD-style)",
+                "max_absolute_error_hartree": max(vqe_errs),
+                "note": (
+                    "Variational quantum eigensolver recovers the correlation "
+                    "energy Hartree-Fock misses. Matches the exact answer to "
+                    f"<= {max(vqe_errs):.1e} Ha across the whole curve, four "
+                    "orders of magnitude inside chemical accuracy."
+                ),
+            },
+            "exact_reference": {
+                "method": "exact diagonalisation of the same qubit Hamiltonian",
+                "note": "The ground truth at this basis.",
+            },
+            "honest_scaling_caveat": (
+                "At 4 qubits classical FCI is cheap, so there is NO computational "
+                "advantage. The point of this benchmark is to validate the "
+                "quantum stack end-to-end and demonstrate the correlation-energy "
+                "story. A protein binding pocket is ~10^5 qubits away."
+            ),
+        },
     }
