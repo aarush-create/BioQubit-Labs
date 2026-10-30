@@ -1,27 +1,46 @@
-# Pinned deliberately, including TRANSITIVE dependencies.
-# Two of these pins exist because the unpinned version broke the build:
-#   autoray >= 0.8 removed NumpyMimic, which PennyLane 0.39 calls at import
-#   (AttributeError: module 'autoray.autoray' has no attribute 'NumpyMimic').
-#   Qiskit 1.0 removed qiskit.algorithms and opflow entirely.
-# Quantum libraries move fast. An unpinned install is how a demo works on
-# Monday and breaks on Friday.
+# Pinned deliberately. Quantum libraries move fast; an unpinned install is how
+# a demo works on Monday and breaks on Friday.
+#
+# ROUND 2 UPDATE (Qiskit backend): adding pennylane-qiskit forces PennyLane to
+# >= 0.44 and numpy to >= 2.0 (qiskit requires numpy 2). The old pins
+# (pennylane 0.39 / autoray 0.7 / numpy 1.26) are therefore retired. This set
+# is the one verified locally: the trained SARS-CoV-2 model still reports
+# roc_auc 0.742 under it, and qiskit.aer was validated against the analytic
+# default.qubit backend (see convergence_check.py: residual scales as 1/sqrt(N),
+# exponent -0.497, no fixture above 2 sigma).
+#
+# DO NOT replace this file with a `pip freeze` taken on Windows: that pins
+# sspilib (Windows-only, pulled in by qiskit-ibm-runtime), which has no Linux
+# wheel and fails the Render build. Pin the majors here; let pip resolve the
+# platform-specific auth sub-deps.
 
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 httpx==0.28.1
 
-numpy==1.26.4
+numpy==2.2.6            # bumped from 1.26.4 — qiskit requires numpy>=2.0
 scipy==1.14.1
 pandas==2.2.3
 scikit-learn==1.6.0
 
-pennylane==0.39.0
-autoray==0.7.0          # REQUIRED PIN — see note above
+# --- quantum stack (verified working set) ---
+pennylane==0.45.1
+pennylane-lightning==0.45.0
+autoray==0.8.4         # the old "pin to 0.7" note no longer applies on PL 0.45
+autograd==1.8.0        # PennyLane 0.45 requires autograd<1.9
 
-biopython==1.84         # Smith-Waterman alignment + BLOSUM62 in the sentinel
+# Qiskit backend for QVIRA_BACKEND=qiskit.aer. This line pulls qiskit,
+# qiskit-aer and qiskit-ibm-runtime (and their platform-correct auth deps)
+# transitively; the explicit pins below keep the majors fixed.
+pennylane-qiskit==0.45.1
+qiskit==2.6.1
+qiskit-aer==0.17.2
+
+biopython==1.84        # Smith-Waterman alignment + BLOSUM62 in the sentinel
 
 # Local-only, NOT needed to serve the app:
 #   pyscf        — build_vqe_data.py (precomputes H2 Hamiltonians)
+#   qiskit-nature, qiskit-algorithms — build_qnature_data.py (local chemistry benchmark)
 #   jupyter      — notebooks/vqe_h2.ipynb
 #   matplotlib   — notebook plots
