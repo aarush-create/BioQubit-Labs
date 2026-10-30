@@ -869,7 +869,7 @@ export default function App() {
                           gap: '1rem', padding: '0.75rem 1.25rem', borderBottom: `1px solid ${C.ink2}`, color: C.paper }}>
               <div>
                 <div className="mono" style={{ fontWeight: 600 }}>{(pdbInput || '6m0j').toUpperCase()}</div>
-                <div className="small" style={{ color: C.ink3, maxWidth: '70ch' }}>
+                <div className="small" style={{ color: C.ink3, maxWidth: '100ch' }}>
                   Experimentally solved structure from the RCSB PDB. Drag to rotate, scroll to zoom.
                   The ACE2 interface distances the model reads were measured from this complex.
                 </div>
@@ -1150,7 +1150,7 @@ export default function App() {
               ) : (
                 <div>
                   <div className="readout-label">Nothing scored yet</div>
-                  <p className="muted" style={{ maxWidth: '58ch', marginTop: '0.15rem', marginBottom: '0.75rem' }}>
+                  <p className="muted" style={{ maxWidth: '80ch', marginTop: '0.15rem', marginBottom: '0.75rem' }}>
                     The ruler below is the stretch of the virus this model was trained on — the
                     201 positions that touch human cells. Pick a mutation you may have heard of and
                     see where it sits:
@@ -1164,7 +1164,7 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                  <p className="small" style={{ marginTop: '0.7rem', maxWidth: '58ch' }}>
+                  <p className="small" style={{ marginTop: '0.7rem', maxWidth: '80ch' }}>
                     Those are SARS-CoV-2 examples. To score influenza, HIV-1, dengue and nine more
                     organisms, open the{' '}
                     <button type="button" onClick={() => setActiveTab('panel')}
@@ -1228,13 +1228,13 @@ export default function App() {
             <section className="panel">
               <div className="panel-head">
                 <h2>Surveillance feed</h2>
-                <p className="lede">
+                <p className="lede" style={{ maxWidth: "100ch" }}>
                   New coronavirus <Term id="spike">spike proteins</Term> uploaded by labs to{' '}
                   <Term id="ncbi">NCBI</Term>, the public sequence database. We compare each one
                   against the original Wuhan virus to find what changed, score the changes that fall
                   in the region that touches human cells (spike positions 331–531), and rank them.
                 </p>
-                <p className="small" style={{ marginTop: '0.5rem', maxWidth: '70ch' }}>
+                <p className="small" style={{ marginTop: '0.5rem', maxWidth: '100ch' }}>
                   Method: local <Term id="alignment">sequence alignment</Term> by{' '}
                   <Term id="smithwaterman">Smith–Waterman</Term> with the{' '}
                   <Term id="blosum">BLOSUM62</Term> substitution matrix.
@@ -1286,7 +1286,7 @@ export default function App() {
                             disabled={sentinelBusy || feedStatus?.refreshing}>
                       {sentinelBusy || feedStatus?.refreshing ? 'Asking NCBI…' : 'Get the newest uploads'}
                     </button>
-                    <span className="small" style={{ maxWidth: '62ch' }}>
+                    <span className="small" style={{ maxWidth: '80ch' }}>
                       {feedStatus?.auto_refresh
                         ? `This list updates itself once it is more than ${feedStatus.max_age_hours}h old. NCBI limits how often anyone may query it, so the update runs quietly in the background and the page shows the last saved copy. The time above is when we actually asked NCBI — never when you opened the page.`
                         : 'NCBI limits how often anyone may query it, so uploads are fetched ahead of time. The time above is when we actually asked.'}
@@ -1410,7 +1410,7 @@ export default function App() {
             <section className="panel">
               <div className="panel-head">
                 <h2>Score a SARS-CoV-2 variant</h2>
-                <p className="lede">
+                <p className="lede" style={{ maxWidth: "100ch" }}>
                   Pick a reference virus, then type the changes you want scored. The standard way to
                   write one is <b>N501Y</b>: the original{' '}
                   <Term id="residue">amino acid</Term> (N), its position along the chain (501), and
@@ -1612,13 +1612,13 @@ export default function App() {
             <section className="panel">
               <div className="panel-head">
                 <h2>The circuit</h2>
-                <p className="lede">
+                <p className="lede" style={{ maxWidth: "100ch" }}>
                   A handful of <Term id="qubit">qubits</Term> can be in many settings at once. The
                   chart shows how much of the quantum state is sitting in each of those{' '}
                   <Term id="basisstate">settings</Term> — taken from the same circuit that produced
                   the score above, not drawn for show.
                 </p>
-                <p className="small" style={{ marginTop: '0.5rem', maxWidth: '70ch' }}>
+                <p className="small" style={{ marginTop: '0.5rem', maxWidth: '100ch' }}>
                   Method: a <Term id="reupload">data re-uploading</Term> circuit; the score is read
                   from the full distribution over those outcomes, not a single measurement. The
                   SARS-CoV-2 model runs on 2 qubits, the cross-virus model on 3.
@@ -1680,7 +1680,7 @@ export default function App() {
             <section className="panel">
               <div className="panel-head">
                 <h2>Epidemic scenario</h2>
-                <p className="lede">
+                <p className="lede" style={{ maxWidth: "100ch" }}>
                   A textbook <Term id="seir">SEIR model</Term>: it sorts a population into
                   Susceptible, Exposed, Infected and Recovered, and works out how fast people move
                   between those four groups. It assumes everyone mixes with everyone evenly, that{' '}
@@ -1751,19 +1751,19 @@ export default function App() {
             <section className="panel">
               <div className="panel-head">
                 <h2>Quantum chemistry</h2>
-                <p className="lede">
+                <p className="lede" style={{ maxWidth: "100ch" }}>
                   A real quantum algorithm — <Term id="vqe">VQE</Term> — working out the lowest
                   energy a hydrogen molecule (H₂, just two atoms) can have. Because the molecule is
                   so small, we can also{' '}
                   <Term id="diagonalization">solve it exactly by brute force</Term>, so you can see
                   for yourself how close the quantum answer gets.
                 </p>
-                <p className="small" style={{ marginTop: '0.5rem', maxWidth: '70ch' }}>
+                <p className="small" style={{ marginTop: '0.5rem', maxWidth: '100ch' }}>
                   Method: <Term id="sto3g">STO-3G</Term> basis,{' '}
                   <Term id="jordanwigner">Jordan–Wigner</Term> mapping, checked against exact
                   diagonalization of the same <Term id="hamiltonian">Hamiltonian</Term>.
                 </p>
-                <p className="note" style={{ marginTop: '0.75rem', maxWidth: '72ch' }}>
+                <p className="note" style={{ marginTop: '0.75rem', maxWidth: '100ch' }}>
                   <b>Why this does not change when you pick a different virus or mutation.</b>{' '}
                   This panel is H₂, nothing else. Its equilibrium bond length (~0.74 Å) is a
                   property of hydrogen itself — a physical constant that does not depend on which
@@ -1964,7 +1964,7 @@ export default function App() {
             <section className="panel">
               <div className="panel-head">
                 <h2>Field benchmarks</h2>
-                <p className="lede">
+                <p className="lede" style={{ maxWidth: "100ch" }}>
                   Our model, measured head-to-head against the classical baselines a fair
                   comparison allows — same features, same split, same test rows — on the
                   hardest honest task in the project: cross-virus held-out-by-protein
@@ -2004,7 +2004,7 @@ export default function App() {
 
               <div className="section stack">
                 <h3>Where quantum wins — cross-virus triage (head-to-head, same data)</h3>
-                <p style={{ maxWidth: '72ch' }}>
+                <p style={{ maxWidth: '100ch' }}>
                   {CROSS_VIRUS_META.task}. All models trained on the same{' '}
                   <span className="mono">{CROSS_VIRUS_META.train.toLocaleString()}</span> rows,
                   tested on the same{' '}
@@ -2091,7 +2091,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <p className="small" style={{ color: C.ink2, maxWidth: '72ch', marginTop: 0 }}>
+                <p className="small" style={{ color: C.ink2, maxWidth: '100ch', marginTop: 0 }}>
                   <b>Clean prefix</b> = how many top-ranked predictions are correct <em>in a row</em>{' '}
                   before the first mistake. For a triage tool, this is the single most meaningful
                   number: it tells a lab how deep into the model's ranked list they can act
@@ -2110,7 +2110,7 @@ export default function App() {
 
               <div className="section stack">
                 <h3>Calibration — the mechanism behind the clean-prefix win</h3>
-                <p style={{ maxWidth: '72ch' }}>
+                <p style={{ maxWidth: '100ch' }}>
                   Clean prefix of 22 isn't a lucky draw; it comes from a measurable property.
                   "Calibration gap" is how far a model's predicted probabilities drift from the
                   real class frequencies they claim to predict — lower is more trustworthy.
@@ -2175,7 +2175,7 @@ export default function App() {
 
               <div className="section stack">
                 <h3>Head-to-head vs ESM — Meta's protein language models (zero-shot, same proteins)</h3>
-                <p style={{ maxWidth: '72ch' }}>
+                <p style={{ maxWidth: '100ch' }}>
                   The ESM family (Meta's 650-million-parameter protein language models) is the
                   default comparator for "zero-shot" variant-effect prediction. We fetched the
                   official <a href="https://github.com/OATML-Markslab/ProteinGym/blob/main/benchmarks/DMS_zero_shot/substitutions/AUC/DMS_substitutions_AUC_DMS_level.csv"
@@ -2293,7 +2293,7 @@ export default function App() {
 
               <div className="section stack">
                 <h3>Per-protein breakdown — the win isn't one lucky protein</h3>
-                <p style={{ maxWidth: '72ch' }}>
+                <p style={{ maxWidth: '100ch' }}>
                   Breaking the cross-virus 0.681 AUC down by held-out protein. The shipped VQC
                   scores <b>≥ 0.666 on every one of the four held-out proteins</b>, mean 0.690,
                   with the lowest score coming from the hardest case (Coxsackievirus B3, a
@@ -2353,7 +2353,7 @@ export default function App() {
 
               <div className="section stack">
                 <h3>Burial — one structural feature, +0.027 AUC, every protein improved</h3>
-                <p style={{ maxWidth: '72ch' }}>
+                <p style={{ maxWidth: '100ch' }}>
                   Our Round 2 centrepiece and the single clearest research finding in the project.
                   Residue <b>burial</b> is a one-number-per-site structural descriptor — how many
                   heavy atoms sit within 10 Å of each residue in the protein's AlphaFold2 fold.
@@ -2621,7 +2621,7 @@ export default function App() {
 
         <footer className="print-hidden" style={{ borderTop: `1px solid ${C.rule}` }}>
           <div className="shell" style={{ padding: '1.5rem var(--gut) 3rem' }}>
-            <p className="small" style={{ maxWidth: '72ch' }}>
+            <p className="small" style={{ maxWidth: '100ch' }}>
               BioQubit Labs · Q-Hack India 2026, Quantum Biotech &amp; Chemistry. Two trained quantum
               models: a SARS-CoV-2 specialist trained on{' '}
               <Term id="starr">Starr et al. (2020)</Term>, a{' '}
@@ -2910,7 +2910,7 @@ function PanelScorer({ API, theme, onScore, onJump }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Score a cross-virus variant</h2>
-        <p className="lede">
+        <p className="lede" style={{ maxWidth: "100ch" }}>
           One quantum model trained across 17 viral proteins from 12 organisms — influenza, HIV-1,
           dengue, coxsackievirus and more — in the ProteinGym deep-mutational-scanning benchmark. It
           is held out <b>by protein</b>, so each score is the model generalising to a virus it never
@@ -3079,7 +3079,7 @@ function Experiments({ metrics }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Experiments &amp; backtesting</h2>
-        <p className="lede">
+        <p className="lede" style={{ maxWidth: "100ch" }}>
           Every design decision in this project was made by measurement, not intuition — and several
           overturned our first guess. This is the full record: the two models, their classical
           baselines on identical features, the ablations that chose the features and the circuit, and
