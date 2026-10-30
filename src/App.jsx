@@ -40,6 +40,16 @@ const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const DOMAIN = { start: 331, end: 531 };
 
+/* The 11 H2 bond lengths that vqe_h2.json actually contains. The /vqe endpoint
+   snaps any request to the nearest of these (there is no live solver in prod —
+   see api/vqe.py), so the slider must do the same, visibly, or sliding across
+   wide ranges silently returns the same point and the panel feels broken. */
+const H2_GEOMETRIES = [0.3, 0.4, 0.5, 0.6, 0.7414, 0.9, 1.1, 1.3, 1.6, 2.0, 2.4];
+const nearestH2Bond = (x) => H2_GEOMETRIES.reduce(
+  (best, p) => (Math.abs(p - x) < Math.abs(best - x) ? p : best),
+  H2_GEOMETRIES[0]
+);
+
 /* iCn3D renders on a white canvas. In dark mode we ask IT for a dark canvas
    rather than filtering the iframe: a CSS filter would also recolour the
    molecule, and iCn3D colours chains and residues to mean something. */
@@ -1620,9 +1630,18 @@ export default function App() {
                         How far apart the two atoms are <span className="mono">{vqeBond.toFixed(4)} <Term id="angstrom">Å</Term></span>
                       </label>
                       <input id="bond" type="range" min="0.3" max="2.4" step="0.01" value={vqeBond}
-                             onChange={e => setVqeBond(parseFloat(e.target.value))} />
+                             list="h2-geometries"
+                             onChange={e => setVqeBond(nearestH2Bond(parseFloat(e.target.value)))} />
+                      <datalist id="h2-geometries">
+                        {H2_GEOMETRIES.map(b => <option key={b} value={b} />)}
+                      </datalist>
                       <div className="small" style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span>0.3 Å</span><span>they settle at ≈ 0.74 Å</span><span>2.4 Å</span>
+                      </div>
+                      <div className="small" style={{ marginTop: '0.25rem', color: 'var(--ink3, #727b76)' }}>
+                        The slider snaps to the 11 geometries we precomputed with VQE
+                        ({H2_GEOMETRIES.join(', ')} Å). The backend serves the nearest; sliding
+                        between stored points returns the same result.
                       </div>
                     </div>
 
@@ -1641,9 +1660,16 @@ export default function App() {
 
                     {vqeView === 'single' && vqeResult && (
                       <div className="stack-sm">
+                        <div className="small" style={{ fontWeight: 500 }}>
+                          Showing H₂ at <span className="mono">R = {Number(vqeResult.bond_length ?? 0).toFixed(4)} Å</span>
+                          {Math.abs((vqeResult.bond_length ?? vqeBond) - vqeBond) > 1e-4 && (
+                            <> (requested {vqeBond.toFixed(4)} Å — snapped to the nearest precomputed geometry)</>
+                          )}
+                        </div>
                         <dl className="facts">
-                          <div><dt>Quantum answer</dt><dd>{Number(vqeResult.vqe_energy ?? 0).toFixed(6)} <Term id="hartree">Ha</Term></dd></div>
-                          <div><dt>Exact answer</dt><dd>{Number(vqeResult.exact_energy ?? 0).toFixed(6)} Ha</dd></div>
+                          <div><dt>Classical mean-field (Hartree–Fock)</dt><dd>{vqeResult.hartree_fock_energy != null ? `${Number(vqeResult.hartree_fock_energy).toFixed(6)} Ha` : '—'}</dd></div>
+                          <div><dt>Quantum answer (VQE)</dt><dd>{Number(vqeResult.vqe_energy ?? 0).toFixed(6)} <Term id="hartree">Ha</Term></dd></div>
+                          <div><dt>Exact answer (FCI)</dt><dd>{Number(vqeResult.exact_energy ?? 0).toFixed(6)} Ha</dd></div>
                         </dl>
                         <p className={`note ${vqeResult.within_chemical_accuracy ? '' : 'is-flag'}`}>
                           <b>Off by {Number(vqeResult.absolute_error ?? 0).toExponential(2)} Ha</b> —{' '}
