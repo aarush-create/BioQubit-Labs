@@ -1,0 +1,38 @@
+# Vercel only serves the Vite front end (dist/). Everything below must NOT be
+# bundled or it will blow the function size limit — the Python API is deployed
+# separately on Render.
+#
+# WHY THIS FILE EXISTS: without it, Vercel's auto-detection scoops up api/
+# (now ~650 MB with the full PennyLane + Qiskit install) and tries to bundle
+# it as a serverless function, failing with "Total bundle size exceeds the
+# maximum function size (500 MB)."
+
+# Backend — deployed on Render, not Vercel
+api/
+
+# Local training / data artefacts (none of these ship to users)
+af2/
+notebooks/
+docs/
+
+# Python virtual environments (if present anywhere)
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Local build output and cache
+.vercel/
+.vite/
+
+# Attachments and large committed data not used by the SPA
+*.pdf
+*.npz
+*.ipynb
+
+# Dev / editor cruft
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.log
