@@ -1677,9 +1677,18 @@ export default function App() {
                     {vqeView === 'curve' && vqeCurve && (
                       <div className="stack-sm">
                         <div className="small">
-                          Pulling the two atoms apart — largest error anywhere on the curve{' '}
-                          <span className="mono">{Number(vqeCurve.max_absolute_error ?? 0).toExponential(2)} Ha</span>
+                          Pulling the two atoms apart — quantum VQE off the exact answer by at most{' '}
+                          <span className="mono">{Number(vqeCurve.max_vqe_absolute_error ?? vqeCurve.max_absolute_error ?? 0).toExponential(2)} Ha</span>
                           {vqeCurve.all_within_chemical_accuracy && ', every point inside chemical accuracy'}
+                          {typeof vqeCurve.max_hf_absolute_error === 'number' && (
+                            <>
+                              {'; classical mean-field '}
+                              <Term id="hartreefock">Hartree–Fock</Term>
+                              {' off by up to '}
+                              <span className="mono">{Number(vqeCurve.max_hf_absolute_error).toFixed(3)} Ha</span>
+                              {' (≈'}{Math.round(vqeCurve.max_hf_absolute_error * 627.509)}{' kcal/mol) at the stretched bond.'}
+                            </>
+                          )}
                         </div>
                         <div style={{ width: '100%', height: 'clamp(170px, 44vw, 200px)', minWidth: 0 }}>
                           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -1689,14 +1698,18 @@ export default function App() {
                               <YAxis stroke={C.rule} tick={{ fill: C.ink2, fontSize: 10 }} domain={['auto', 'auto']} />
                               <RTooltip contentStyle={tipStyle} />
                               <Legend wrapperStyle={{ fontSize: 11 }} />
-                              <Line type="monotone" dataKey="exact_energy" stroke={C.ok} strokeWidth={2.5} dot={false} name="Exact" />
-                              <Line type="monotone" dataKey="vqe_energy" stroke={C.assay} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }} name="Eigensolver" />
+                              <Line type="monotone" dataKey="exact_energy" stroke={C.ok} strokeWidth={2.5} dot={false} name="Exact (FCI)" />
+                              <Line type="monotone" dataKey="hartree_fock_energy" stroke={C.flag} strokeWidth={1.5} strokeDasharray="2 4" dot={false} name="Classical (Hartree–Fock)" />
+                              <Line type="monotone" dataKey="vqe_energy" stroke={C.assay} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }} name="Quantum (VQE)" />
                             </LineChart>
                           </ResponsiveContainer>
                         </div>
                         <div className="small">
                           The atoms settle {vqeCurve.equilibrium_bond_length} Å apart; measured in
-                          the real world, it is {vqeCurve.experimental_bond_length} Å.
+                          the real world, it is {vqeCurve.experimental_bond_length} Å. The gap
+                          between the classical and the quantum line is the <b>correlation energy</b>
+                          — electrons avoid each other, and Hartree–Fock, by averaging the field,
+                          ignores that.
                         </div>
                       </div>
                     )}
