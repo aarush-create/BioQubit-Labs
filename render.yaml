@@ -13,6 +13,14 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
+      # Run inference on IBM Qiskit's Aer simulator. Validated against the
+      # analytic default.qubit backend (convergence_check.py). If the free
+      # tier runs out of memory or cold-start is too slow, override this to
+      # "default.qubit" in the Render DASHBOARD (dashboard wins over this
+      # file) and redeploy — the qiskit deps stay installed but unused, so
+      # the heavy Aer simulator is never imported.
+      - key: QVIRA_BACKEND
+        value: qiskit.aer
       - key: QVIRA_SHOTS
         value: "2048"
       # Ephemeral disk here, so the sentinel cache is built locally and
