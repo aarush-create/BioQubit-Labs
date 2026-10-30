@@ -37,8 +37,13 @@ There are **two trained models**, deliberately kept separate:
   proteins from 12 organisms (influenza, HIV-1, dengue, coxsackievirus and more)
   drawn from the ProteinGym deep-mutational-scanning benchmark
 - Projects an SEIR epidemic **scenario** from the score (scipy `solve_ivp`)
-- Runs a real VQE on H₂, benchmarked against exact diagonalization of the same
-  Hamiltonian at every bond length
+- Runs a real VQE on H₂, served through **IBM Qiskit Aer** and benchmarked
+  against two classical references at every bond length: **Hartree–Fock**
+  (mean-field) and **exact diagonalization** (FCI). VQE matches exact to
+  ≤1.9×10⁻⁷ Ha across the whole curve; classical Hartree–Fock misses up to
+  **0.22 Ha (~139 kcal/mol)** at stretched bonds — a real
+  quantum-beats-classical-mean-field result at this scale, with no claim of
+  speedup
 
 **What it does not do**
 
@@ -183,6 +188,24 @@ is **dense** (two features per qubit, one per rotation axis), which is what lets
 six descriptors ride on three qubits instead of six — our own ablation measured
 that six qubits hits a barren plateau (0.558 AUC, loss stuck) where three do not.
 
+### Backend
+
+Inference and the VQE run on **IBM Qiskit Aer** (`QVIRA_BACKEND=qiskit.aer`),
+served through the PennyLane–Qiskit plugin from the same `circuit.py` the
+models were trained on. The weights are backend-agnostic — we did not retrain
+for Qiskit; the port was validated instead. Aer is a sampling simulator (no
+analytic mode), so we tested convergence rather than exact equality: the
+residual between the two backends falls with shot count at a fitted exponent
+of **−0.497** (pure shot noise predicts −0.500), and across 18
+fixture-by-shot-level tests no residual exceeded 2σ. Both backends implement
+the same quantum state. See `api/parity_check.py` and
+`api/convergence_check.py` — the scripts and their outputs are the audit
+trail.
+
+At serving shot counts (2048 shots) a single prediction carries ±0.010 of
+shot noise, which `quantum_engine.py` already reports as an error bar with
+every score.
+
 ---
 
 ## The two models in the app
@@ -313,11 +336,26 @@ defined in place via `src/glossary.js` and the footer glossary.
 
 | | |
 |---|---|
-| Frontend (Vercel) | auto-detects Vite. Set `VITE_API_URL` to the Render URL, then redeploy. |
+| Frontend (Vercel) | auto-detects Vite. Set `VITE_API_URL` to the Render URL, then redeploy. **`.vercelignore` must be in the repo root with the leading dot** — without it Vercel bundles `api/` as a serverless function and fails at the 500 MB limit (the Qiskit install alone is ~650 MB). Windows File Explorer silently strips the leading dot; create or rename the file from the GitHub web UI if that happens. |
 | Backend (Render) | `render.yaml` included. Set `ALLOWED_ORIGINS`, plus `GEMINI_API_KEY` and/or `XAI_API_KEY`. |
 
 Render's free tier sleeps after ~15 min idle (~50 s cold start). The frontend
 pings `/` on load and says what it is waiting for rather than erroring.
+
+#### Backend simulator
+
+Set in `render.yaml` and in the Render dashboard:
+
+```
+QVIRA_BACKEND=qiskit.aer   # IBM Qiskit Aer simulator (validated)
+QVIRA_SHOTS=2048           # shots per prediction
+```
+
+If the free tier runs out of memory on Aer, set `QVIRA_BACKEND=default.qubit`
+in the Render dashboard (overrides `render.yaml`) and redeploy. The Qiskit
+dependencies stay installed but Aer is never imported, so RSS drops. Scores
+are identical within shot noise (that's what `convergence_check.py` proves),
+so the fallback is a pure resource trade-off, not a correctness one.
 
 ---
 
