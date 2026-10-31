@@ -520,4 +520,6 @@ ablation and validation decisions are the team's own.
 
 ## Licence
 
-MIT — see LICENSE.
+All rights reserved. This project is proprietary — see LICENSE. No use, copying,
+modification, or distribution is permitted without the prior written permission
+of BioQubit Labs.
