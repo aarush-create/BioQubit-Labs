@@ -557,6 +557,7 @@ export default function App() {
      header can show the "where we win" number next to the SARS specialist. */
   const [panelMeta, setPanelMeta] = useState(null);
   const [showMetrics, setShowMetrics] = useState(false);
+  const [metricsModel, setMetricsModel] = useState('sars'); // which card: 'sars' | 'panel'
   const [structureFullscreen, setStructureFullscreen] = useState(false);
 
   /* A dialog that floats over a page which is still scrolling is a phone
@@ -888,13 +889,104 @@ export default function App() {
       )}
 
       {/* -------------------------------------------------------- model card */}
-      {showMetrics && metrics && (
+      {showMetrics && (
         <div className="overlay print-hidden" onClick={() => setShowMetrics(false)}>
           <div className="dialog custom-scrollbar" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-              <h2 style={{ fontSize: 'var(--t-lg)' }}>Model card</h2>
+              <h2 style={{ fontSize: 'var(--t-lg)' }}>Model card — {metricsModel === 'panel' ? 'cross-virus generalist' : 'SARS-CoV-2 specialist'}</h2>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowMetrics(false)}>Close</button>
             </div>
+
+            {/* ===================== cross-virus generalist card ===================== */}
+            {metricsModel === 'panel' && (<>
+              <p className="small" style={{ marginTop: '0.4rem' }}>
+                The hardest honest task in the project: generalising to a virus the model has never
+                seen. Every method got the same {CROSS_VIRUS_META.features} features and the same split,
+                then was tested on {CROSS_VIRUS_META.test.toLocaleString('en-US')} substitutions in{' '}
+                17 proteins held out <b>by protein</b>. The bar is <Term id="rocauc">ROC-AUC</Term>.
+              </p>
+
+              <div className="lanes" style={{ marginTop: '1.25rem' }}>
+                {CROSS_VIRUS_HEAD_TO_HEAD.slice().sort((a, b) => b.auc - a.auc).map((m) => (
+                  <div key={m.name} className="lane" style={{ gridTemplateColumns: '1fr 7rem', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 'var(--t-sm)', marginBottom: '0.35rem' }}>
+                        {m.name}{typeof m.cleanPrefix === 'number' ? ` · ${m.cleanPrefix} clean` : ''}
+                      </div>
+                      <Bar value={(m.auc - 0.5) / 0.5} />
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="mono" style={{ color: m.kind === 'quantum' ? C.assay : undefined }}>{m.auc.toFixed(4)}</div>
+                      <div className="mono small" style={{ opacity: 0.6 }}>{m.params != null ? `${m.params}p` : ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p className="small" style={{ marginTop: '0.9rem' }}>
+                Held out <b>by protein</b>, so the model is scored on a virus it never trained on — the
+                deployment condition for a novel pathogen. Our shipped 63-parameter circuit beats logistic
+                regression and matches the best classical baseline; the 10-restart ensemble beats every one
+                of them. "clean" is the clean prefix: correct top-ranked calls in a row before the first miss.
+              </p>
+
+              {(() => {
+                const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+                const M = ESM_HEAD_TO_HEAD.models;
+                const ourMean = mean(M["Q-VIRA VQC (ours)"].values);
+                const esm = Object.entries(M)
+                  .filter(([, info]) => info.kind === 'esm-plm')
+                  .map(([name, info]) => ({ name, mean: mean(info.values), params: info.params, ours: false }));
+                const rows = [{ name: "Q-VIRA VQC (ours)", mean: ourMean, params: "63 params", ours: true }, ...esm]
+                  .sort((a, b) => b.mean - a.mean);
+                const delta = (ourMean - mean(M["ESM-1v (single)"].values)).toFixed(3);
+                return (
+                  <>
+                    <h3 style={{ marginTop: '1.5rem', fontSize: 'var(--t-md)' }}>vs Meta ESM — zero-shot, same four proteins</h3>
+                    <p className="small" style={{ marginTop: '0.3rem' }}>
+                      Mean <Term id="rocauc">AUC</Term> on the four held-out proteins, from ProteinGym v1.3 —
+                      same proteins, same mutants, same metric. ESM is Meta's 650-million-parameter protein
+                      language model.
+                    </p>
+                    <div className="lanes" style={{ marginTop: '0.9rem' }}>
+                      {rows.map((r) => (
+                        <div key={r.name} className="lane" style={{ gridTemplateColumns: '1fr 7rem', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontSize: 'var(--t-sm)', marginBottom: '0.35rem' }}>
+                              {r.name}{r.params ? ` · ${r.params}` : ''}
+                            </div>
+                            <Bar value={(r.mean - 0.5) / 0.5} />
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div className="mono" style={{ color: r.ours ? C.assay : undefined }}>{r.mean.toFixed(3)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="note" style={{ marginTop: '1rem' }}>
+                      A 63-parameter circuit beats every ESM variant on the alignment-free task
+                      (+{delta} mean AUC over ESM-1v). <b>The honest caveat:</b> alignment-based methods
+                      (GEMME 0.762, TranceptEVE 0.766) still beat us — but they need the deep sequence
+                      alignments a brand-new virus does not have, which is the one case this tool is for.
+                    </p>
+                  </>
+                );
+              })()}
+
+              <dl className="facts" style={{ marginTop: '1.25rem' }}>
+                <div><dt>Shipped held-out AUC</dt>
+                  <dd className="mono">0.6812 ± 0.0022 <span style={{ opacity: 0.6 }}>(3-seed mean)</span></dd></div>
+                <div><dt>Circuit</dt><dd>{CROSS_VIRUS_META.circuit} · 63 tunable dials · dense encoding</dd></div>
+                <div><dt>Trained / tested on</dt>
+                  <dd>{CROSS_VIRUS_META.train.toLocaleString('en-US')} / {CROSS_VIRUS_META.test.toLocaleString('en-US')} rows, no protein in both halves</dd></div>
+              </dl>
+              <p className="small" style={{ marginTop: '0.75rem' }}>
+                Source: committed <code>api/metrics_panel.json</code> (served at <code>GET /panel/status</code>) and ProteinGym v1.3.
+              </p>
+            </>)}
+
+            {/* ===================== SARS-CoV-2 specialist card ===================== */}
+            {metricsModel !== 'panel' && metrics && (<>
             <p className="small" style={{ marginTop: '0.4rem' }}>
               Every method below got the same four numbers per mutation and the same training data,
               then was tested on {metrics.n_test} mutations <Term id="heldout">none of them had ever
@@ -966,6 +1058,7 @@ export default function App() {
               How the data was split for testing: {metrics.split}<br />
               What the model reads: {metrics.features}
             </p>
+            </>)}
           </div>
         </div>
       )}
@@ -1020,18 +1113,18 @@ export default function App() {
                 SARS stays visible so a judge can see both headline numbers at a glance;
                 clicking either opens the same model card modal (which has both). */}
             {panelMeta?.held_out_auc && (
-              <button className="btn btn-sm" onClick={() => setShowMetrics(true)}
+              <button className="btn btn-sm" onClick={() => { setMetricsModel('panel'); setShowMetrics(true); }}
                       style={{
                         background: C.assay, color: '#fff', borderColor: C.assay,
                         fontWeight: 600,
                       }}
                       title="Cross-virus generalist — beats every classical baseline on identical features">
                 <span className="hide-sm">Cross-virus </span>AUC {panelMeta.held_out_auc.toFixed(3)}
-                <span className="hide-sm"> · beats classical</span>
+                <span className="hide-sm"> · model card</span>
               </button>
             )}
             {metrics?.vqc?.roc_auc && (
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowMetrics(true)}
+              <button className="btn btn-ghost btn-sm" onClick={() => { setMetricsModel('sars'); setShowMetrics(true); }}
                       title="SARS-CoV-2 specialist — the on-task number">
                 <span className="hide-sm">SARS </span>AUC {metrics.vqc.roc_auc.toFixed(3)}
                 <span className="hide-sm"> · model card</span>
